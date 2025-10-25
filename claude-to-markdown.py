@@ -116,7 +116,7 @@ def format_citations(citations: list[dict[str, Any]]) -> str | None:
     citation_lines = ["", "*Citations:*"]
     for i, citation in enumerate(citations, 1):
         details = citation.get("details", {})  # details can be null
-        url = details.get("url", "") if details else ""
+        url = details.get("url", "")
         if url:
             citation_lines.append(f"{i}. [{url}]({url})")
 
