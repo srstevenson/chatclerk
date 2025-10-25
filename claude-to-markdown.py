@@ -10,9 +10,10 @@
 
 # pyright: reportAny=false, reportExplicitAny=false
 
+import argparse
 import json
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
@@ -409,15 +410,38 @@ def has_content(conversation: dict[str, Any]) -> bool:
     return False
 
 
+@dataclass
+class Args(argparse.Namespace):
+    input_dir: Path = field(init=False)
+    output_dir: Path = field(init=False)
+
+
 def main() -> None:
-    conversations_path = Path("raw-logs/claude/conversations.json")
+    parser = argparse.ArgumentParser(
+        description="convert data export from claude.ai to Markdown",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    parser.add_argument(
+        "--input-dir",
+        type=Path,
+        default=Path("raw-logs/claude"),
+        help="directory containing claude.ai export",
+    )
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=Path("processed-logs/claude"),
+        help="directory to write Markdown files",
+    )
+    args = parser.parse_args(namespace=Args())
+
+    conversations_path = args.input_dir.joinpath("conversations.json")
     with conversations_path.open() as f:
         conversations = json.load(f)
 
     logger.info("Loaded %d conversations", len(conversations))
 
-    output_dir = Path("processed-logs/claude")
-    output_dir.mkdir(exist_ok=True)
+    args.output_dir.mkdir(parents=True, exist_ok=True)
 
     exported_count = 0
     skipped_count = 0
@@ -426,8 +450,8 @@ def main() -> None:
         if has_content(conversation):
             uuid = conversation["uuid"]
             md_content = convert_to_markdown(conversation)
-            output_file = output_dir.joinpath(f"{uuid}.md")
-            _ = output_file.write_text(md_content)
+            output_file = args.output_dir.joinpath(f"{uuid}.md")
+            output_file.write_text(md_content)
 
             exported_count += 1
         else:

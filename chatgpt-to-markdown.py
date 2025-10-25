@@ -10,6 +10,7 @@
 
 # pyright: reportAny=false, reportExplicitAny=false
 
+import argparse
 import json
 import logging
 import shutil
@@ -22,16 +23,15 @@ logging.basicConfig(level=logging.DEBUG, format="[%(levelname)-8s] %(message)s")
 logger = logging.getLogger(__name__)
 
 
-def find_chatgpt_user_dir() -> Path | None:
+def find_chatgpt_user_dir(input_dir: Path) -> Path | None:
     """Find the ChatGPT user directory containing exported images."""
-    base_dir = Path("raw-logs/chatgpt")
-    if not base_dir.exists():
+    if not input_dir.exists():
         return None
 
-    user_dirs = list(base_dir.glob("user-*"))
+    user_dirs = list(input_dir.glob("user-*"))
 
     if not user_dirs:
-        logger.warning("No user directory found in raw-logs/chatgpt/")
+        logger.warning("No user directory found in %s", input_dir)
         return None
 
     if len(user_dirs) > 1:
@@ -411,7 +411,7 @@ def copy_conversation_images(
         logger.warning("No user directory provided, cannot copy images")
         return
 
-    image_dir = output_dir / conversation_id
+    image_dir = output_dir.joinpath(conversation_id)
     image_dir.mkdir(exist_ok=True)
 
     for image_info in images:
@@ -429,9 +429,9 @@ def copy_conversation_images(
 
         if matching_files:
             source_file = matching_files[0]
-            dest_file = image_dir / filename
+            dest_file = image_dir.joinpath(filename)
 
-            _ = shutil.copy2(source_file, dest_file)
+            shutil.copy2(source_file, dest_file)
             logger.debug("  Copied image: %s -> %s", source_file.name, dest_file.name)
         else:
             logger.warning("  Image not found for asset: %s", asset_id)
@@ -447,21 +447,44 @@ def has_content(conversation: dict[str, Any]) -> bool:
     return False
 
 
+@dataclass
+class Args(argparse.Namespace):
+    input_dir: Path = field(init=False)
+    output_dir: Path = field(init=False)
+
+
 def main() -> None:
-    conversations_path = Path("raw-logs/chatgpt/conversations.json")
+    parser = argparse.ArgumentParser(
+        description="convert data export from chatgpt.com to Markdown",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    parser.add_argument(
+        "--input-dir",
+        type=Path,
+        default=Path("raw-logs/chatgpt"),
+        help="directory containing chatgpt.com export",
+    )
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=Path("processed-logs/chatgpt"),
+        help="directory to write Markdown files",
+    )
+    args = parser.parse_args(namespace=Args())
+
+    conversations_path = args.input_dir.joinpath("conversations.json")
     with conversations_path.open() as f:
         conversations = json.load(f)
 
     logger.info("Loaded %d conversations", len(conversations))
 
-    user_dir = find_chatgpt_user_dir()
+    user_dir = find_chatgpt_user_dir(args.input_dir)
     if user_dir:
         logger.info("Found user directory: %s", user_dir)
     else:
         logger.warning("No user directory found - images will not be embedded")
 
-    output_dir = Path("processed-logs/chatgpt")
-    output_dir.mkdir(parents=True, exist_ok=True)
+    args.output_dir.mkdir(parents=True, exist_ok=True)
 
     exported_count = 0
     skipped_count = 0
@@ -472,11 +495,13 @@ def main() -> None:
                 "id", "unknown"
             )
             md_content, images = convert_to_markdown(conversation, user_dir)
-            output_file = output_dir.joinpath(f"{conversation_id}.md")
-            _ = output_file.write_text(md_content)
+            output_file = args.output_dir.joinpath(f"{conversation_id}.md")
+            output_file.write_text(md_content)
 
             if images:
-                copy_conversation_images(conversation_id, images, output_dir, user_dir)
+                copy_conversation_images(
+                    conversation_id, images, args.output_dir, user_dir
+                )
 
             exported_count += 1
         else:
