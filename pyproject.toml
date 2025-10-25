@@ -1,3 +1,24 @@
+[project]
+name = "chatclerk"
+version = "0.1.0"
+description = "Convert LLM chat exports to Markdown"
+readme = "README.md"
+authors = [{ name = "Scott Stevenson", email = "scott@stevenson.io" }]
+requires-python = ">=3.14"
+dependencies = []
+
+[project.scripts]
+chatclerk-chatgpt = "chatclerk.chatgpt:main"
+chatclerk-claude = "chatclerk.claude:main"
+chatclerk-grok = "chatclerk.grok:main"
+
+[build-system]
+requires = ["uv_build>=0.9.5,<0.10.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = ["basedpyright>=1.32.1", "ruff>=0.14.2"]
+
 [tool.basedpyright]
 typeCheckingMode = "recommended"
 pythonVersion = "3.14"

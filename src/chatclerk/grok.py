@@ -1,10 +1,3 @@
-#!/usr/bin/env -S uv run --script
-#
-# /// script
-# requires-python = ">=3.14"
-# dependencies = []
-# ///
-
 """Convert data export from grok.com to Markdown."""
 
 import argparse
@@ -549,7 +542,3 @@ def main() -> None:
     logger.info(
         "Export complete: %d exported, %d skipped", exported_count, skipped_count
     )
-
-
-if __name__ == "__main__":
-    main()
