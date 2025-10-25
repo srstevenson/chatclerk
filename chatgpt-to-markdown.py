@@ -50,7 +50,26 @@ def format_timestamp(timestamp: float) -> str:
     return dt.strftime("%Y-%m-%d %H:%M:%S UTC")
 
 
-@dataclass
+@dataclass(frozen=True)
+class ImageInfo:
+    """Representation of a generated image in a ChatGPT conversation.
+
+    Attributes:
+        asset: The asset pointer URI (e.g., `sediment://...`).
+        width: Image width in pixels, or `None` if unavailable.
+        height: Image height in pixels, or `None` if unavailable.
+        gen_id: DALL-E generation ID, or `None` if unavailable.
+        filename: Filename for the exported image file.
+    """
+
+    asset: str
+    width: int | None
+    height: int | None
+    gen_id: str | None
+    filename: str
+
+
+@dataclass(frozen=True)
 class Message:
     """Representation of a message in a ChatGPT conversation.
 
@@ -59,14 +78,14 @@ class Message:
         content: The text content of the message.
         timestamp: Unix timestamp when the message was created, or `None`.
         metadata: Additional metadata associated with the message.
-        images: List of image information dictionaries for generated images.
+        images: List of generated image metadata.
     """
 
     role: str
     content: str
     timestamp: float | None
     metadata: dict[str, Any]
-    images: list[dict[str, Any]] = field(default_factory=list)
+    images: list[ImageInfo] = field(default_factory=list)
 
 
 def clean_text(text: str) -> str:
@@ -91,9 +110,7 @@ def clean_text(text: str) -> str:
     return cleaned
 
 
-def _process_image_asset(
-    part: dict[str, Any], user_dir: Path
-) -> tuple[str, dict[str, Any]]:
+def _process_image_asset(part: dict[str, Any], user_dir: Path) -> tuple[str, ImageInfo]:
     """Process an image asset pointer and extract image metadata.
 
     Args:
@@ -101,32 +118,28 @@ def _process_image_asset(
         user_dir: Path to the user directory containing exported images.
 
     Returns:
-        tuple[str, dict[str, Any]]: A tuple containing a placeholder text string
-            and a dictionary with image metadata including asset ID, dimensions,
-            generation ID, and filename.
+        tuple[str, ImageInfo]: A tuple containing a placeholder text string
+            and an `ImageInfo` object with image metadata including asset ID,
+            dimensions, generation ID, and filename.
     """
-    width = part.get("width", "unknown")
-    height = part.get("height", "unknown")
+    width = part.get("width")
+    height = part.get("height")
     asset = part.get("asset_pointer", "")
 
     part_metadata = part.get("metadata", {})
     dalle_meta = part_metadata.get("dalle", {})
-    gen_id = dalle_meta.get("gen_id", "")
+    gen_id = dalle_meta.get("gen_id")
 
     asset_id = asset.replace("sediment://", "")
     matching_files = list(user_dir.glob(f"{asset_id}-*.png"))
     filename = matching_files[0].name if matching_files else f"{asset_id}.png"
 
-    image_info = {
-        "asset": asset,
-        "width": width,
-        "height": height,
-        "gen_id": gen_id,
-        "filename": filename,
-    }
+    image_info = ImageInfo(asset, width, height, gen_id, filename)
 
-    placeholder = f"*[Generated Image: {width}x{height}]*"
-    logger.debug("  Found generated image: %sx%s", width, height)
+    width_str = str(width) if width is not None else "unknown"
+    height_str = str(height) if height is not None else "unknown"
+    placeholder = f"*[Generated Image: {width_str}x{height_str}]*"
+    logger.debug("  Found generated image: %sx%s", width_str, height_str)
 
     return placeholder, image_info
 
@@ -153,7 +166,7 @@ def _process_multimodal_content(
     """
     parts = content_obj.get("parts", [])
     content_items: list[str] = []
-    image_list: list[dict[str, Any]] = []
+    image_list: list[ImageInfo] = []
 
     for part in parts:
         if isinstance(part, dict):
@@ -416,17 +429,21 @@ def format_message(
     if message.images:
         for i, image_info in enumerate(message.images):
             image_num = image_index_offset + i + 1
-            width = image_info.get("width", "unknown")
-            height = image_info.get("height", "unknown")
-            filename = image_info.get("filename", f"image_{image_num}.png")
 
             if conversation_id:
-                image_path = f"{conversation_id}/{filename}"
+                image_path = f"{conversation_id}/{image_info.filename}"
             else:
-                image_path = filename
+                image_path = image_info.filename
 
+            width_str = (
+                str(image_info.width) if image_info.width is not None else "unknown"
+            )
+            height_str = (
+                str(image_info.height) if image_info.height is not None else "unknown"
+            )
             image_md = (
-                f"![Generated Image {image_num} ({width}x{height})]({image_path})"
+                f"![Generated Image {image_num} "
+                f"({width_str}x{height_str})]({image_path})"
             )
             content_parts.append(image_md)
 
@@ -444,7 +461,7 @@ def format_message(
 
 def convert_to_markdown(
     conversation: dict[str, Any], user_dir: Path
-) -> tuple[str, list[dict[str, Any]]]:
+) -> tuple[str, list[ImageInfo]]:
     """Convert a ChatGPT conversation to Markdown format.
 
     Args:
@@ -452,8 +469,8 @@ def convert_to_markdown(
         user_dir: Path to the user directory containing exported images.
 
     Returns:
-        tuple[str, list[dict[str, Any]]]: A tuple containing the formatted
-            Markdown string and a list of image metadata dictionaries.
+        tuple[str, list[ImageInfo]]: A tuple containing the formatted
+            Markdown string and a list of `ImageInfo` objects.
     """
     title = conversation.get("title", "Untitled")
     conversation_id = conversation.get("conversation_id") or conversation.get("id", "")
@@ -482,7 +499,7 @@ def convert_to_markdown(
 
     logger.debug("  Extracted %d visible messages", len(messages))
 
-    all_images: list[dict[str, Any]] = []
+    all_images: list[ImageInfo] = []
     for message in messages:
         if message.images:
             all_images.extend(message.images)
@@ -502,14 +519,14 @@ def convert_to_markdown(
 
 
 def copy_conversation_images(
-    conversation_id: str, images: list[dict[str, Any]], output_dir: Path, user_dir: Path
+    conversation_id: str, images: list[ImageInfo], output_dir: Path, user_dir: Path
 ) -> None:
     """Copy conversation images to a subdirectory in the output location.
 
     Args:
         conversation_id: The conversation identifier for naming the
             subdirectory.
-        images: List of image metadata dictionaries.
+        images: List of `ImageInfo` objects.
         output_dir: Base output directory for processed conversations.
         user_dir: Path to the user directory containing source images.
     """
@@ -520,21 +537,18 @@ def copy_conversation_images(
     image_dir.mkdir(exist_ok=True)
 
     for image_info in images:
-        asset = image_info.get("asset", "")
-        filename = image_info.get("filename", "")
-
-        if not filename:
-            logger.warning("  No filename for asset: %s", asset)
+        if not image_info.filename:
+            logger.warning("  No filename for asset: %s", image_info.asset)
             continue
 
-        asset_id = asset.replace("sediment://", "")
+        asset_id = image_info.asset.replace("sediment://", "")
 
         # Find the matching PNG file (has format: file_<asset_id>-<uuid>.png)
         matching_files = list(user_dir.glob(f"{asset_id}-*.png"))
 
         if matching_files:
             source_file = matching_files[0]
-            dest_file = image_dir.joinpath(filename)
+            dest_file = image_dir.joinpath(image_info.filename)
 
             shutil.copy2(source_file, dest_file)
             logger.debug("  Copied image: %s -> %s", source_file.name, dest_file.name)

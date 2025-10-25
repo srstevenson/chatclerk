@@ -36,7 +36,7 @@ class Language(Enum):
     TEXT = ""
 
 
-@dataclass
+@dataclass(frozen=True)
 class ToolOutput:
     """Representation of formatted tool result content with language hint.
 
