@@ -1,0 +1,18 @@
+[tool.basedpyright]
+typeCheckingMode = "recommended"
+reportUnusedCallResult = false
+reportImplicitStringConcatenation = false
+
+[tool.ruff.format]
+skip-magic-trailing-comma = true
+
+[tool.ruff.lint]
+ignore = ["D", "COM812", "EM101", "EM102", "FIX002", "S311", "TD003", "TRY003"]
+select = ["ALL"]
+allowed-confusables = ["×"]
+
+[tool.ruff.lint.flake8-tidy-imports]
+ban-relative-imports = "all"
+
+[tool.ruff.lint.isort]
+split-on-trailing-comma = false
