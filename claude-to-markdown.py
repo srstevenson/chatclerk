@@ -6,11 +6,7 @@
 # ///
 
 
-"""Convert Claude.ai conversations.json export to markdown files.
-
-This script parses a conversations.json file from Claude.ai and creates
-individual markdown files for each conversation in a directory.
-"""
+"""Convert data export from claude.ai to Markdown."""
 
 # pyright: reportAny=false, reportExplicitAny=false
 
@@ -65,11 +61,9 @@ def format_json_if_valid(text: str) -> ToolOutput:
     if not text:
         return ToolOutput(text=text, language=Language.TEXT)
 
-    # Check if it looks like XML (starts with <).
     if text.startswith("<"):
         return ToolOutput(text=text, language=Language.XML)
 
-    # Check if it looks like JSON (starts with { or [).
     if not text.startswith(("{", "[")):
         return ToolOutput(text=text, language=Language.TEXT)
 
@@ -92,7 +86,6 @@ def format_citations(citations: list[dict[str, Any]]) -> str | None:
         if url:
             citation_lines.append(f"{i}. [{url}]({url})")
 
-    # Only return if we have actual citations
     min_citation_lines = 2
     if len(citation_lines) > min_citation_lines:
         logger.info(
@@ -115,16 +108,13 @@ def format_artifact(item: dict[str, Any]) -> str | None:
 
     logger.info("  Artifact: %s", artifact_title)
 
-    # Format the artifact header
     artifact_header = f"### Artifact: {artifact_title}"
     if artifact_id:
         artifact_header += f"\n*Type: {artifact_type} | ID: {artifact_id}*"
 
-    # Handle markdown artifacts specially - render them natively
     if artifact_type == "text/markdown":
         return f"{artifact_header}\n\n---\n\n{artifact_content.rstrip()}\n\n---"
 
-    # For non-markdown artifacts, use code blocks
     lang = ""
     if artifact_type == "application/vnd.ant.code":
         lang = "python"
@@ -168,7 +158,6 @@ def format_tool_input(tool_name: str, tool_input: dict[str, Any]) -> str | None:
     if not tool_input:  # Can be empty dict
         return None
 
-    # Dispatch to specific tool handlers
     handlers = {
         "web_search": _format_web_search_input,
         "web_fetch": _format_web_fetch_input,
@@ -236,7 +225,6 @@ def _process_text_content(item: dict[str, Any], text_parts: list[str]) -> None:
     if text:
         text_parts.append(text)
 
-    # Handle citations if present (always present but often empty)
     citations_text = format_citations(item["citations"])
     if citations_text:
         text_parts.append(citations_text)
@@ -246,13 +234,11 @@ def _process_tool_use(item: dict[str, Any], text_parts: list[str]) -> str:
     """Process a 'tool_use' content item and return the tool name."""
     tool_name = item["name"]
 
-    # Handle artifacts
     if tool_name == "artifacts":
         artifact_text = format_artifact(item)
         if artifact_text:
             text_parts.append(artifact_text)
 
-    # Handle other interesting tools
     elif tool_name in ["web_search", "web_fetch", "repl"]:
         tool_input_text = format_tool_input(tool_name, item["input"])
         if tool_input_text:
@@ -265,12 +251,10 @@ def _process_tool_result(item: dict[str, Any], text_parts: list[str]) -> None:
     """Process a 'tool_result' content item and append formatted results."""
     tool_name = item["name"]
 
-    # Check for display_content first (rich formatted results)
     display_text = format_display_content(item["display_content"], tool_name)
     if display_text:
         text_parts.append(display_text)
 
-    # Extract text from tool results
     result_content = item["content"]
     if isinstance(result_content, list):
         for result_item in result_content:
@@ -358,19 +342,14 @@ def format_message(message: dict[str, Any]) -> str:
     header = f"## {sender.title()}"
     timestamp = format_timestamp(created_at)
 
-    # Extract content from the structured content array
     content = extract_text_from_content(message["content"])
-
-    # Fallback to the text field if no content was extracted
     if not content:
         content = message["text"].strip()
 
-    # Build the message parts
     content_parts: list[str] = []
     if content:
         content_parts.append(content)
 
-    # Add attachments and files
     attachments_text = format_attachments(message["attachments"])
     if attachments_text:
         content_parts.append(attachments_text)
@@ -379,7 +358,6 @@ def format_message(message: dict[str, Any]) -> str:
     if files_text:
         content_parts.append(files_text)
 
-    # Assemble the final message block
     return f"{header}\n\n*{timestamp}*\n\n" + "\n\n".join(content_parts)
 
 

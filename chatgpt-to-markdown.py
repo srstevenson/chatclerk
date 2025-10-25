@@ -6,11 +6,7 @@
 # ///
 
 
-"""Convert ChatGPT conversations.json export to markdown files.
-
-This script parses a conversations.json file from ChatGPT and creates
-individual markdown files for each conversation in a directory.
-"""
+"""Convert data export from chatgpt.com to Markdown."""
 
 # pyright: reportAny=false, reportExplicitAny=false
 
@@ -36,7 +32,6 @@ def find_chatgpt_user_dir() -> Path | None:
     if not base_dir.exists():
         return None
 
-    # Look for directories matching user-* pattern
     user_dirs = list(base_dir.glob("user-*"))
 
     if not user_dirs:
@@ -68,14 +63,11 @@ class Message:
 
 def clean_text(text: str) -> str:
     """Remove ChatGPT's internal formatting characters from text."""
-    # Remove Private Use Area characters (U+E000 to U+F8FF)
-    # These are invisible markers ChatGPT uses internally but filters on their website
     private_use_start = 0xE000
     private_use_end = 0xF8FF
     cleaned = ""
     for char in text:
         code = ord(char)
-        # Keep normal characters and emojis, skip private use area
         if not (private_use_start <= code <= private_use_end):
             cleaned += char
     return cleaned
@@ -89,20 +81,17 @@ def _process_image_asset(
     height = part.get("height", "unknown")
     asset = part.get("asset_pointer", "")
 
-    # Extract metadata
     part_metadata = part.get("metadata", {})
     dalle_meta = part_metadata.get("dalle", {})
     gen_id = dalle_meta.get("gen_id", "")
 
-    # Find the original filename
     asset_id = asset.replace("sediment://", "")
-    filename = f"{asset_id}.png"  # Default
+    filename = f"{asset_id}.png"
     if user_dir:
         matching_files = list(user_dir.glob(f"{asset_id}-*.png"))
         if matching_files:
             filename = matching_files[0].name
 
-    # Store image info for later processing
     image_info = {
         "asset": asset,
         "width": width,
@@ -164,7 +153,6 @@ def _process_regular_content(
     parts = content_obj.get("parts", [])
     content = "\n".join(str(part) for part in parts if part)
 
-    # Clean ChatGPT's internal formatting characters
     content = clean_text(content)
     content_stripped = content.strip()
 
@@ -184,18 +172,15 @@ def _process_message_content(
     content_type = content_obj.get("content_type", "")
     timestamp = message.get("create_time")
 
-    # Skip user_editable_context messages (user profile/instructions)
     if content_type == "user_editable_context":
         logger.debug("  Skipping user context message")
         return None
 
-    # Handle multimodal content (images, etc.)
     if content_type == "multimodal_text":
         return _process_multimodal_content(
             content_obj, role, metadata, timestamp, user_dir
         )
 
-    # Handle regular text content
     return _process_regular_content(content_obj, role, metadata, timestamp)
 
 
@@ -217,13 +202,11 @@ def traverse_message_tree(
         node = mapping[node_id]
         message = node.get("message")
 
-        # Process this message if it exists and should be visible
         if message:
             author = message.get("author", {})
             role = author.get("role", "")
             metadata = message.get("metadata", {})
 
-            # Skip system messages that are visually hidden
             if metadata.get("is_visually_hidden_from_conversation"):
                 logger.debug("  Skipping hidden message: %s", role)
             elif role in ["user", "assistant", "tool"]:
@@ -231,7 +214,6 @@ def traverse_message_tree(
                 if msg:
                     messages.append(msg)
 
-        # Visit all children in order
         children = node.get("children", [])
         for child_id in children:
             visit(child_id)
@@ -261,12 +243,7 @@ def format_search_results(metadata: dict[str, Any]) -> str | None:
             if url:
                 result_lines.append(f"- [{title}]({url})")
                 if snippet:
-                    # Clean up snippet (remove excessive whitespace)
-                    max_snippet_length = 200
-                    clean_snippet = " ".join(snippet.split())[:max_snippet_length]
-                    if len(snippet) > max_snippet_length:
-                        clean_snippet += "..."
-                    result_lines.append(f"  > {clean_snippet}")
+                    result_lines.append(f"  > {snippet.strip()}")
 
     if len(result_lines) > 1:
         logger.info("  Formatted %d search results", len(result_lines) - 1)
@@ -304,14 +281,11 @@ def format_message_content(content: str) -> str:
     """Format message content, detecting and formatting JSON."""
     content = content.strip()
 
-    # Check if content looks like JSON
     if content.startswith("{") and content.endswith("}"):
         try:
-            # Try to parse and pretty-print as JSON
             parsed = json.loads(content)
             formatted_json = json.dumps(parsed, indent=2)
         except (json.JSONDecodeError, ValueError):
-            # Not valid JSON, return as-is
             return content
         else:
             return f"```json\n{formatted_json}\n```"
@@ -330,27 +304,21 @@ def format_message(
         image_index_offset: Starting index for images in this message
 
     """
-    # Format role header
     if message.role == "tool":
-        # Tool outputs are labeled differently
         header = "## Tool Output"
     else:
         header = f"## {message.role.title()}"
 
-    # Format timestamp if available
     timestamp_str = ""
     if message.timestamp:
         timestamp_str = f"\n\n*{format_timestamp(message.timestamp)}*"
 
-    # Build content parts
     content_parts: list[str] = []
 
-    # Add main content (with JSON formatting if applicable)
     if message.content:
         formatted_content = format_message_content(message.content)
         content_parts.append(formatted_content)
 
-    # Add images if present
     if message.images:
         for i, image_info in enumerate(message.images):
             image_num = image_index_offset + i + 1
@@ -358,7 +326,6 @@ def format_message(
             height = image_info.get("height", "unknown")
             filename = image_info.get("filename", f"image_{image_num}.png")
 
-            # Create image reference
             if conversation_id:
                 image_path = f"{conversation_id}/{filename}"
             else:
@@ -369,17 +336,14 @@ def format_message(
             )
             content_parts.append(image_md)
 
-    # Add search results if present
     search_results = format_search_results(message.metadata)
     if search_results:
         content_parts.append(search_results)
 
-    # Add citations if present
     citations = format_citations(message.metadata)
     if citations:
         content_parts.append(citations)
 
-    # Assemble the final message block
     content = "\n\n".join(content_parts)
     return f"{header}{timestamp_str}\n\n{content}"
 
@@ -400,7 +364,6 @@ def convert_to_markdown(
 
     logger.info("Converting conversation: %s (%s)", title, conversation_id)
 
-    # Build header
     markdown = f"# {title}\n\n"
     markdown += f"**Conversation ID:** {conversation_id}\n"
 
@@ -412,29 +375,24 @@ def convert_to_markdown(
     markdown += f"**Archived:** {'Yes' if is_archived else 'No'}  \n"
     markdown += f"**Model:** {model_slug}\n\n"
 
-    # Extract messages from the tree
     mapping = conversation.get("mapping", {})
     messages = traverse_message_tree(mapping, user_dir=user_dir)
 
-    # Sort messages chronologically by timestamp
     messages = sorted(messages, key=lambda m: m.timestamp if m.timestamp else 0)
 
     logger.info("  Extracted %d visible messages", len(messages))
 
-    # Collect all images from messages
     all_images: list[dict[str, Any]] = []
     for message in messages:
         if message.images:
             all_images.extend(message.images)
 
-    # Format each message with proper image indexing
     message_blocks: list[str] = []
     image_counter = 0
     for message in messages:
         message_block = format_message(message, conversation_id, image_counter)
         if message_block:
             message_blocks.append(message_block)
-        # Update image counter
         if message.images:
             image_counter += len(message.images)
 
@@ -457,7 +415,6 @@ def copy_conversation_images(
         logger.warning("No user directory provided, cannot copy images")
         return
 
-    # Create subdirectory for images
     image_dir = output_dir / conversation_id
     image_dir.mkdir(exist_ok=True)
 
@@ -469,7 +426,6 @@ def copy_conversation_images(
             logger.warning("  No filename for asset: %s", asset)
             continue
 
-        # Extract asset ID from sediment:// URL
         asset_id = asset.replace("sediment://", "")
 
         # Find the matching PNG file (has format: file_<asset_id>-<uuid>.png)
@@ -487,9 +443,7 @@ def copy_conversation_images(
 
 def has_content(conversation: dict[str, Any]) -> bool:
     """Check if a conversation has any meaningful content."""
-    # Check if title exists
     if conversation.get("title", "").strip():
-        # Also check if there are any visible messages
         mapping = conversation.get("mapping", {})
         messages = traverse_message_tree(mapping)
         return len(messages) > 0
@@ -504,7 +458,6 @@ def main() -> None:
 
     logger.info("Loaded %d conversations", len(conversations))
 
-    # Find the user directory containing images
     user_dir = find_chatgpt_user_dir()
     if user_dir:
         logger.info("Found user directory: %s", user_dir)
@@ -526,7 +479,6 @@ def main() -> None:
             output_file = output_dir.joinpath(f"{conversation_id}.md")
             _ = output_file.write_text(md_content)
 
-            # Copy images if any
             if images:
                 copy_conversation_images(conversation_id, images, output_dir, user_dir)
 
