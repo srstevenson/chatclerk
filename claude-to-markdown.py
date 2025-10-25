@@ -649,16 +649,17 @@ def main() -> None:
     skipped_count = 0
 
     for conversation in conversations:
-        if has_content(conversation):
-            uuid = conversation["uuid"]
-            md_content = convert_to_markdown(conversation)
-            output_file = args.output_dir.joinpath(f"{uuid}.md")
-            output_file.write_text(md_content)
-
-            exported_count += 1
-        else:
+        if not has_content(conversation):
             logger.debug("Skipping empty conversation (%s)", conversation["uuid"])
             skipped_count += 1
+            continue
+
+        uuid = conversation["uuid"]
+        md_content = convert_to_markdown(conversation)
+        output_file = args.output_dir.joinpath(f"{uuid}.md")
+        output_file.write_text(md_content)
+
+        exported_count += 1
 
     logger.info(
         "Export complete: %d exported, %d skipped", exported_count, skipped_count

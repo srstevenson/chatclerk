@@ -361,11 +361,12 @@ def format_citations(metadata: dict[str, Any]) -> str | None:
         url = metadata_obj.get("url", "")
         title = metadata_obj.get("title", "")
 
-        if url:
-            if title:
-                citation_lines.append(f"{i}. [{title}]({url})")
-            else:
-                citation_lines.append(f"{i}. {url}")
+        if not url:
+            continue
+        if title:
+            citation_lines.append(f"{i}. [{title}]({url})")
+        else:
+            citation_lines.append(f"{i}. {url}")
 
     if len(citation_lines) > 1:
         logger.debug("Formatted %d citations", len(citation_lines) - 1)
@@ -547,14 +548,15 @@ def copy_conversation_images(
         # Find the matching PNG file (has format: file_<asset_id>-<uuid>.png)
         matching_files = list(user_dir.glob(f"{asset_id}-*.png"))
 
-        if matching_files:
-            source_file = matching_files[0]
-            dest_file = image_dir.joinpath(image_info.filename)
-
-            shutil.copy2(source_file, dest_file)
-            logger.debug("Copied image: %s -> %s", source_file.name, dest_file.name)
-        else:
+        if not matching_files:
             logger.warning("Image not found for asset: %s", asset_id)
+            continue
+
+        source_file = matching_files[0]
+        dest_file = image_dir.joinpath(image_info.filename)
+
+        shutil.copy2(source_file, dest_file)
+        logger.debug("Copied image: %s -> %s", source_file.name, dest_file.name)
 
 
 def has_content(conversation: dict[str, Any], user_dir: Path) -> bool:
@@ -648,26 +650,25 @@ def main() -> None:
     skipped_count = 0
 
     for conversation in conversations:
-        if has_content(conversation, user_dir):
-            conversation_id = conversation.get("conversation_id") or conversation.get(
-                "id", "unknown"
-            )
-            md_content, images = convert_to_markdown(conversation, user_dir)
-            output_file = args.output_dir.joinpath(f"{conversation_id}.md")
-            output_file.write_text(md_content)
-
-            if images:
-                copy_conversation_images(
-                    conversation_id, images, args.output_dir, user_dir
-                )
-
-            exported_count += 1
-        else:
+        if not has_content(conversation, user_dir):
             conv_id = conversation.get("conversation_id") or conversation.get(
                 "id", "unknown"
             )
             logger.debug("Skipping empty conversation (%s)", conv_id)
             skipped_count += 1
+            continue
+
+        conversation_id = conversation.get("conversation_id") or conversation.get(
+            "id", "unknown"
+        )
+        md_content, images = convert_to_markdown(conversation, user_dir)
+        output_file = args.output_dir.joinpath(f"{conversation_id}.md")
+        output_file.write_text(md_content)
+
+        if images:
+            copy_conversation_images(conversation_id, images, args.output_dir, user_dir)
+
+        exported_count += 1
 
     logger.info(
         "Export complete: %d exported, %d skipped", exported_count, skipped_count
