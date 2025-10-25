@@ -532,10 +532,13 @@ def convert_to_markdown(conversation: dict[str, Any]) -> str:
         len(conversation["chat_messages"]),
     )
 
-    markdown = f"# {name}\n\n"
-    markdown += f"**UUID:** {uuid}\n"
-    markdown += f"**Created:** {created_at}  \n"
-    markdown += f"**Updated:** {updated_at}\n\n"
+    # Build header metadata
+    header_parts = [
+        f"# {name}\n",
+        f"**UUID:** {uuid}",
+        f"**Created:** {created_at}  ",
+        f"**Updated:** {updated_at}\n",
+    ]
 
     messages: list[dict[str, Any]] = conversation["chat_messages"]
     message_blocks: list[str] = []
@@ -545,9 +548,11 @@ def convert_to_markdown(conversation: dict[str, Any]) -> str:
         if message_block:
             message_blocks.append(message_block)
 
-    markdown += "\n\n".join(message_blocks)
+    # Combine header and messages
+    header = "\n".join(header_parts)
+    messages_section = "\n\n".join(message_blocks)
 
-    return markdown
+    return f"{header}\n{messages_section}"
 
 
 def has_content(conversation: dict[str, Any]) -> bool:

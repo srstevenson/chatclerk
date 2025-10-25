@@ -102,12 +102,12 @@ def clean_text(text: str) -> str:
     """
     private_use_start = 0xE000
     private_use_end = 0xF8FF
-    cleaned = ""
+    cleaned: list[str] = []
     for char in text:
         code = ord(char)
         if not (private_use_start <= code <= private_use_end):
-            cleaned += char
-    return cleaned
+            cleaned.append(char)
+    return "".join(cleaned)
 
 
 def _process_image_asset(part: dict[str, Any], user_dir: Path) -> tuple[str, ImageInfo]:
@@ -481,16 +481,16 @@ def convert_to_markdown(
 
     logger.info("Converting conversation: %s (%s)", title, conversation_id)
 
-    markdown = f"# {title}\n\n"
-    markdown += f"**Conversation ID:** {conversation_id}\n"
+    # Build header metadata
+    header_parts = [f"# {title}\n", f"**Conversation ID:** {conversation_id}"]
 
     if create_time:
-        markdown += f"**Created:** {format_timestamp(create_time)}  \n"
+        header_parts.append(f"**Created:** {format_timestamp(create_time)}  ")
     if update_time:
-        markdown += f"**Updated:** {format_timestamp(update_time)}  \n"
+        header_parts.append(f"**Updated:** {format_timestamp(update_time)}  ")
 
-    markdown += f"**Archived:** {'Yes' if is_archived else 'No'}  \n"
-    markdown += f"**Model:** {model_slug}\n\n"
+    header_parts.append(f"**Archived:** {'Yes' if is_archived else 'No'}  ")
+    header_parts.append(f"**Model:** {model_slug}\n")
 
     mapping = conversation.get("mapping", {})
     messages = traverse_message_tree(mapping, user_dir)
@@ -513,9 +513,11 @@ def convert_to_markdown(
         if message.images:
             image_counter += len(message.images)
 
-    markdown += "\n\n".join(message_blocks)
+    # Combine header and messages
+    header = "\n".join(header_parts)
+    messages_section = "\n\n".join(message_blocks)
 
-    return markdown, all_images
+    return f"{header}\n{messages_section}", all_images
 
 
 def copy_conversation_images(
