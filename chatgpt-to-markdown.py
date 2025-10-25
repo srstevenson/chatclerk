@@ -479,15 +479,15 @@ def convert_to_markdown(
     logger.info("Converting conversation: %s (%s)", title, conversation_id)
 
     # Build header metadata
-    header_parts = [f"# {title}\n", f"**Conversation ID:** {conversation_id}"]
+    header_parts = [f"# {title}\n", f"- **Conversation ID:** {conversation_id}"]
 
     if create_time:
-        header_parts.append(f"**Created:** {format_timestamp(create_time)}  ")
+        header_parts.append(f"- **Created:** {format_timestamp(create_time)}")
     if update_time:
-        header_parts.append(f"**Updated:** {format_timestamp(update_time)}  ")
+        header_parts.append(f"- **Updated:** {format_timestamp(update_time)}")
 
-    header_parts.append(f"**Archived:** {'Yes' if is_archived else 'No'}  ")
-    header_parts.append(f"**Model:** {model_slug}\n")
+    header_parts.append(f"- **Archived:** {'Yes' if is_archived else 'No'}")
+    header_parts.append(f"- **Model:** {model_slug}\n")
 
     mapping = conversation.get("mapping", {})
     messages = traverse_message_tree(mapping, user_dir)

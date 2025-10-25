@@ -366,14 +366,14 @@ def convert_to_markdown(
         len(conversation["responses"]),
     )
 
-    header_parts = [f"# {title}\n", f"**Conversation ID:** {conv_id}"]
+    header_parts = [f"# {title}\n", f"- **Conversation ID:** {conv_id}"]
 
     if create_time and (created := format_iso_timestamp(create_time)):
-        header_parts.append(f"**Created:** {created}  ")
+        header_parts.append(f"- **Created:** {created}")
     if modify_time and (modified := format_iso_timestamp(modify_time)):
-        header_parts.append(f"**Updated:** {modified}  ")
+        header_parts.append(f"- **Updated:** {modified}")
     if system_prompt:
-        header_parts.append(f"**System Prompt:** {system_prompt}  ")
+        header_parts.append(f"- **System Prompt:** {system_prompt}")
 
     header_parts.append("")
 

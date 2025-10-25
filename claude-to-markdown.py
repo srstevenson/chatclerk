@@ -523,9 +523,9 @@ def convert_to_markdown(conversation: dict[str, Any]) -> str:
     # Build header metadata
     header_parts = [
         f"# {name}\n",
-        f"**UUID:** {uuid}",
-        f"**Created:** {created_at}  ",
-        f"**Updated:** {updated_at}\n",
+        f"- **UUID:** {uuid}",
+        f"- **Created:** {created_at}",
+        f"- **Updated:** {updated_at}\n",
     ]
 
     messages: list[dict[str, Any]] = conversation["chat_messages"]
