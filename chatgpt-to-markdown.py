@@ -116,9 +116,9 @@ def _process_multimodal_content(
 
     for part in parts:
         if isinstance(part, dict):
-            part_type = part.get("content_type", "")
+            part_type = part.get("content_type", "")  # pyright: ignore[reportUnknownVariableType, reportUnknownMemberType]
             if part_type == "image_asset_pointer":
-                placeholder, image_info = _process_image_asset(part, user_dir)
+                placeholder, image_info = _process_image_asset(part, user_dir)  # pyright: ignore[reportUnknownArgumentType]
                 content_items.append(placeholder)
                 image_list.append(image_info)
         elif isinstance(part, str) and part.strip():

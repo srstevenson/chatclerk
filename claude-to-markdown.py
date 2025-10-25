@@ -254,9 +254,9 @@ def _process_tool_result(item: dict[str, Any], text_parts: list[str]) -> None:
 
     result_content = item["content"]
     if isinstance(result_content, list):
-        for result_item in result_content:
-            if isinstance(result_item, dict) and result_item.get("type") == "text":
-                result_text = format_tool_result_text(result_item["text"], tool_name)
+        for result_item in result_content:  # pyright: ignore[reportUnknownVariableType]
+            if isinstance(result_item, dict) and result_item.get("type") == "text":  # pyright: ignore[reportUnknownMemberType]
+                result_text = format_tool_result_text(result_item["text"], tool_name)  # pyright: ignore[reportUnknownArgumentType]
                 if result_text:
                     text_parts.append(result_text)
 
