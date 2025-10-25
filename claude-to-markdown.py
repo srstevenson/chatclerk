@@ -412,11 +412,14 @@ def has_content(conversation: dict[str, Any]) -> bool:
 
 @dataclass
 class Args(argparse.Namespace):
+    """Command-line arguments."""
+
     input_dir: Path = field(init=False)
     output_dir: Path = field(init=False)
 
 
-def main() -> None:
+def parse_arguments() -> Args:
+    """Parse command-line arguments."""
     parser = argparse.ArgumentParser(
         description="convert data export from claude.ai to Markdown",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
@@ -435,7 +438,11 @@ def main() -> None:
         default=Path("processed-logs/claude"),
         help="directory to write Markdown files",
     )
-    args = parser.parse_args(namespace=Args())
+    return parser.parse_args(namespace=Args())
+
+
+def main() -> None:
+    args = parse_arguments()
 
     conversations_path = args.input_dir.joinpath("conversations.json")
     with conversations_path.open() as f:
