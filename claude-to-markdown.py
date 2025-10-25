@@ -7,8 +7,6 @@
 
 """Convert data export from claude.ai to Markdown."""
 
-# pyright: reportAny=false, reportExplicitAny=false
-
 import argparse
 import json
 import logging

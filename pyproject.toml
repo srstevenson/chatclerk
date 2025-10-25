@@ -1,8 +1,10 @@
 [tool.basedpyright]
 typeCheckingMode = "recommended"
 pythonVersion = "3.14"
-reportUnusedCallResult = false
+reportAny = false
+reportExplicitAny = false
 reportImplicitStringConcatenation = false
+reportUnusedCallResult = false
 
 [tool.ruff]
 target-version = "py314"
