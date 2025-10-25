@@ -138,7 +138,7 @@ def _process_image_asset(part: dict[str, Any], user_dir: Path) -> tuple[str, Ima
     width_str = str(width) if width is not None else "unknown"
     height_str = str(height) if height is not None else "unknown"
     placeholder = f"*[Generated Image: {width_str}x{height_str}]*"
-    logger.debug("  Found generated image: %sx%s", width_str, height_str)
+    logger.debug("Found generated image: %sx%s", width_str, height_str)
 
     return placeholder, image_info
 
@@ -246,7 +246,7 @@ def _process_message_content(
     timestamp = message.get("create_time")
 
     if content_type == "user_editable_context":
-        logger.debug("  Skipping user context message")
+        logger.debug("Skipping user context message")
         return None
 
     if content_type == "multimodal_text":
@@ -288,7 +288,7 @@ def traverse_message_tree(
             metadata = message.get("metadata", {})
 
             if metadata.get("is_visually_hidden_from_conversation"):
-                logger.debug("  Skipping hidden message: %s", role)
+                logger.debug("Skipping hidden message: %s", role)
             elif role in ["user", "assistant", "tool"]:
                 msg = _process_message_content(message, role, metadata, user_dir)
                 if msg:
@@ -335,7 +335,7 @@ def format_search_results(metadata: dict[str, Any]) -> str | None:
                     result_lines.append(f"  > {snippet.strip()}")
 
     if len(result_lines) > 1:
-        logger.debug("  Formatted %d search results", len(result_lines) - 1)
+        logger.debug("Formatted %d search results", len(result_lines) - 1)
         return "\n".join(result_lines)
 
     return None
@@ -368,7 +368,7 @@ def format_citations(metadata: dict[str, Any]) -> str | None:
                 citation_lines.append(f"{i}. {url}")
 
     if len(citation_lines) > 1:
-        logger.debug("  Formatted %d citations", len(citation_lines) - 1)
+        logger.debug("Formatted %d citations", len(citation_lines) - 1)
         return "\n".join(citation_lines)
 
     return None
@@ -496,7 +496,7 @@ def convert_to_markdown(
 
     messages = sorted(messages, key=lambda m: m.timestamp if m.timestamp else 0)
 
-    logger.debug("  Extracted %d visible messages", len(messages))
+    logger.debug("Extracted %d visible messages", len(messages))
 
     all_images: list[ImageInfo] = []
     for message in messages:
@@ -539,7 +539,7 @@ def copy_conversation_images(
 
     for image_info in images:
         if not image_info.filename:
-            logger.warning("  No filename for asset: %s", image_info.asset)
+            logger.warning("No filename for asset: %s", image_info.asset)
             continue
 
         asset_id = image_info.asset.replace("sediment://", "")
@@ -552,9 +552,9 @@ def copy_conversation_images(
             dest_file = image_dir.joinpath(image_info.filename)
 
             shutil.copy2(source_file, dest_file)
-            logger.debug("  Copied image: %s -> %s", source_file.name, dest_file.name)
+            logger.debug("Copied image: %s -> %s", source_file.name, dest_file.name)
         else:
-            logger.warning("  Image not found for asset: %s", asset_id)
+            logger.warning("Image not found for asset: %s", asset_id)
 
 
 def has_content(conversation: dict[str, Any], user_dir: Path) -> bool:

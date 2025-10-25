@@ -122,9 +122,7 @@ def format_citations(citations: list[dict[str, Any]]) -> str | None:
 
     min_citation_lines = 2
     if len(citation_lines) > min_citation_lines:
-        logger.debug(
-            "  Formatted %d citations", len(citation_lines) - min_citation_lines
-        )
+        logger.debug("Formatted %d citations", len(citation_lines) - min_citation_lines)
         return "\n".join(citation_lines)
     return None
 
@@ -148,7 +146,7 @@ def format_artifact(item: dict[str, Any]) -> str | None:
     if not artifact_content:
         return None
 
-    logger.debug("  Artifact: %s", artifact_title)
+    logger.debug("Artifact: %s", artifact_title)
 
     artifact_header = f"### Artifact: {artifact_title}"
     if artifact_id:
@@ -180,7 +178,7 @@ def _format_web_search_input(tool_input: dict[str, Any]) -> str | None:
     """
     query = tool_input.get("query", "")
     if query:
-        logger.debug("  Web search: %s", query)
+        logger.debug("Web search: %s", query)
         return f"*[Searching for: {query}]*"
     return None
 
@@ -196,7 +194,7 @@ def _format_web_fetch_input(tool_input: dict[str, Any]) -> str | None:
     """
     url = tool_input.get("url", "")
     if url:
-        logger.debug("  Web fetch: %s", url)
+        logger.debug("Web fetch: %s", url)
         return f"*[Fetching: {url}]*"
     return None
 
@@ -212,7 +210,7 @@ def _format_repl_input(tool_input: dict[str, Any]) -> str | None:
     """
     code = tool_input.get("code", "")
     if code:
-        logger.debug("  REPL: %d chars", len(code))
+        logger.debug("REPL: %d chars", len(code))
         return f"*[Code executed]*\n```javascript\n{code.strip()}\n```"
     return None
 
@@ -263,14 +261,14 @@ def format_display_content(
         return None
 
     display_type = display_content.get("type", "")
-    logger.debug("  Display_content: type=%s, tool=%s", display_type, tool_name)
+    logger.debug("Display_content: type=%s, tool=%s", display_type, tool_name)
 
     if display_type == "rich_link":
         link = display_content.get("link", {})
         url = link.get("url", "")
         title = link.get("title", url)
         if url:
-            logger.debug("  Rich link: %s", title)
+            logger.debug("Rich link: %s", title)
             return f"*[Tool Result: {tool_name}]*\n- [{title}]({url})"
 
     elif display_type == "rich_content":
@@ -283,7 +281,7 @@ def format_display_content(
                 if title and url:
                     links.append(f"- [{title}]({url})")
             if links:
-                logger.debug("  Rich content: %d items", len(links))
+                logger.debug("Rich content: %d items", len(links))
                 return f"*[Tool Result: {tool_name}]*\n" + "\n".join(links)
 
     return None
@@ -486,7 +484,7 @@ def format_message(message: dict[str, Any]) -> str:
     sender = message["sender"]
     created_at = message["created_at"]
 
-    logger.debug("  Message: %s (%d items)", sender, len(message["content"]))
+    logger.debug("Message: %s (%d items)", sender, len(message["content"]))
 
     header = f"## {sender.title()}"
     timestamp = format_timestamp(created_at)
