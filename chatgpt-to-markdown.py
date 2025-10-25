@@ -5,7 +5,6 @@
 # dependencies = []
 # ///
 
-
 """Convert data export from chatgpt.com to Markdown."""
 
 # pyright: reportAny=false, reportExplicitAny=false
@@ -24,7 +23,14 @@ logger = logging.getLogger(__name__)
 
 
 def find_chatgpt_user_dir(input_dir: Path) -> Path:
-    """Find the ChatGPT user directory containing exported images."""
+    """Determine the ChatGPT user directory path from `user.json`.
+
+    Args:
+        input_dir: Path to the directory containing the ChatGPT export data.
+
+    Returns:
+        Path: Absolute path to the user directory containing exported images.
+    """
     user_json_path = input_dir.joinpath("user.json")
     with user_json_path.open() as f:
         user_data = json.load(f)
@@ -32,14 +38,29 @@ def find_chatgpt_user_dir(input_dir: Path) -> Path:
 
 
 def format_timestamp(timestamp: float) -> str:
-    """Convert Unix timestamp to readable format."""
+    """Convert a Unix timestamp to a human-readable string.
+
+    Args:
+        timestamp: Unix timestamp as a float.
+
+    Returns:
+        str: Formatted timestamp string in the format `YYYY-MM-DD HH:MM:SS UTC`.
+    """
     dt = datetime.fromtimestamp(timestamp, tz=UTC)
     return dt.strftime("%Y-%m-%d %H:%M:%S UTC")
 
 
 @dataclass
 class Message:
-    """Represents a message in the conversation."""
+    """Representation of a message in a ChatGPT conversation.
+
+    Attributes:
+        role: The sender's role (user, assistant, or tool).
+        content: The text content of the message.
+        timestamp: Unix timestamp when the message was created, or `None`.
+        metadata: Additional metadata associated with the message.
+        images: List of image information dictionaries for generated images.
+    """
 
     role: str
     content: str
@@ -49,7 +70,17 @@ class Message:
 
 
 def clean_text(text: str) -> str:
-    """Remove ChatGPT's internal formatting characters from text."""
+    """Remove Unicode private use area characters from text.
+
+    ChatGPT uses private use area characters for internal formatting.
+    This function strips them to produce clean output text.
+
+    Args:
+        text: The text to clean.
+
+    Returns:
+        str: Text with private use area characters removed.
+    """
     private_use_start = 0xE000
     private_use_end = 0xF8FF
     cleaned = ""
@@ -63,7 +94,17 @@ def clean_text(text: str) -> str:
 def _process_image_asset(
     part: dict[str, Any], user_dir: Path
 ) -> tuple[str, dict[str, Any]]:
-    """Process an image asset pointer and return (placeholder_text, image_info)."""
+    """Process an image asset pointer and extract image metadata.
+
+    Args:
+        part: Dictionary containing image asset pointer data.
+        user_dir: Path to the user directory containing exported images.
+
+    Returns:
+        tuple[str, dict[str, Any]]: A tuple containing a placeholder text string
+            and a dictionary with image metadata including asset ID, dimensions,
+            generation ID, and filename.
+    """
     width = part.get("width", "unknown")
     height = part.get("height", "unknown")
     asset = part.get("asset_pointer", "")
@@ -97,7 +138,19 @@ def _process_multimodal_content(
     timestamp: float | None,
     user_dir: Path,
 ) -> Message | None:
-    """Process multimodal_text content and return a Message if valid."""
+    """Process multimodal message content containing text and images.
+
+    Args:
+        content_obj: Dictionary containing the message content.
+        role: The sender's role (user, assistant, or tool).
+        metadata: Additional metadata associated with the message.
+        timestamp: Unix timestamp when the message was created, or `None`.
+        user_dir: Path to the user directory containing exported images.
+
+    Returns:
+        Message | None: A `Message` object if valid content exists, otherwise
+            `None`.
+    """
     parts = content_obj.get("parts", [])
     content_items: list[str] = []
     image_list: list[dict[str, Any]] = []
@@ -133,7 +186,18 @@ def _process_regular_content(
     metadata: dict[str, Any],
     timestamp: float | None,
 ) -> Message | None:
-    """Process regular text content and return a Message if valid."""
+    """Process regular text message content.
+
+    Args:
+        content_obj: Dictionary containing the message content.
+        role: The sender's role (user, assistant, or tool).
+        metadata: Additional metadata associated with the message.
+        timestamp: Unix timestamp when the message was created, or `None`.
+
+    Returns:
+        Message | None: A `Message` object if valid content exists, otherwise
+            `None`.
+    """
     parts = content_obj.get("parts", [])
     content = "\n".join(str(part) for part in parts if part)
 
@@ -151,7 +215,20 @@ def _process_regular_content(
 def _process_message_content(
     message: dict[str, Any], role: str, metadata: dict[str, Any], user_dir: Path
 ) -> Message | None:
-    """Process message content and return a Message if valid."""
+    """Process message content based on its type.
+
+    Dispatches to appropriate handler based on content type (multimodal or regular).
+
+    Args:
+        message: Dictionary containing the raw message data.
+        role: The sender's role (user, assistant, or tool).
+        metadata: Additional metadata associated with the message.
+        user_dir: Path to the user directory containing exported images.
+
+    Returns:
+        Message | None: A `Message` object if valid content exists, otherwise
+            `None`.
+    """
     content_obj = message.get("content", {})
     content_type = content_obj.get("content_type", "")
     timestamp = message.get("create_time")
@@ -171,9 +248,18 @@ def _process_message_content(
 def traverse_message_tree(
     mapping: dict[str, Any], user_dir: Path, start_id: str = "client-created-root"
 ) -> list[Message]:
-    """Traverse the message tree in depth-first order to extract messages.
+    """Traverse the conversation message tree to extract all messages.
 
-    Returns a list of Message objects in conversation order.
+    ChatGPT exports conversations as a tree structure to support branching.
+    This function performs a depth-first traversal to extract messages in order.
+
+    Args:
+        mapping: Dictionary mapping node IDs to message nodes.
+        user_dir: Path to the user directory containing exported images.
+        start_id: ID of the root node to start traversal from.
+
+    Returns:
+        list[Message]: List of `Message` objects in conversation order.
     """
     messages: list[Message] = []
 
@@ -205,7 +291,16 @@ def traverse_message_tree(
 
 
 def format_search_results(metadata: dict[str, Any]) -> str | None:
-    """Format web search results from message metadata."""
+    """Format web search results as a Markdown list.
+
+    Args:
+        metadata: Message metadata dictionary potentially containing search
+            results.
+
+    Returns:
+        str | None: Formatted Markdown string of search results, or `None` if
+            no results.
+    """
     search_result_groups = metadata.get("search_result_groups", [])
     if not search_result_groups:
         return None
@@ -235,7 +330,15 @@ def format_search_results(metadata: dict[str, Any]) -> str | None:
 
 
 def format_citations(metadata: dict[str, Any]) -> str | None:
-    """Format citations from message metadata."""
+    """Format citations as a numbered Markdown list.
+
+    Args:
+        metadata: Message metadata dictionary potentially containing citations.
+
+    Returns:
+        str | None: Formatted Markdown string of citations, or `None` if no
+            citations.
+    """
     citations = metadata.get("citations", [])
     if not citations:
         return None
@@ -260,7 +363,14 @@ def format_citations(metadata: dict[str, Any]) -> str | None:
 
 
 def format_message_content(content: str) -> str:
-    """Format message content, detecting and formatting JSON."""
+    """Format message content, applying syntax highlighting to JSON.
+
+    Args:
+        content: The message content to format.
+
+    Returns:
+        str: Formatted content with JSON in code blocks if applicable.
+    """
     content = content.strip()
 
     if content.startswith("{") and content.endswith("}"):
@@ -278,13 +388,15 @@ def format_message_content(content: str) -> str:
 def format_message(
     message: Message, conversation_id: str = "", image_index_offset: int = 0
 ) -> str:
-    """Format a single message as markdown.
+    """Format a single message as Markdown.
 
     Args:
-        message: The message to format
-        conversation_id: The conversation ID for image paths
-        image_index_offset: Starting index for images in this message
+        message: The message to format.
+        conversation_id: The conversation ID for constructing image paths.
+        image_index_offset: Starting index for numbering images in this message.
 
+    Returns:
+        str: The formatted message as a Markdown string.
     """
     if message.role == "tool":
         header = "## Tool Output"
@@ -333,9 +445,15 @@ def format_message(
 def convert_to_markdown(
     conversation: dict[str, Any], user_dir: Path
 ) -> tuple[str, list[dict[str, Any]]]:
-    """Convert a single conversation object to markdown format.
+    """Convert a ChatGPT conversation to Markdown format.
 
-    Returns a tuple of (markdown_text, images_list).
+    Args:
+        conversation: Dictionary containing the conversation data.
+        user_dir: Path to the user directory containing exported images.
+
+    Returns:
+        tuple[str, list[dict[str, Any]]]: A tuple containing the formatted
+            Markdown string and a list of image metadata dictionaries.
     """
     title = conversation.get("title", "Untitled")
     conversation_id = conversation.get("conversation_id") or conversation.get("id", "")
@@ -386,7 +504,15 @@ def convert_to_markdown(
 def copy_conversation_images(
     conversation_id: str, images: list[dict[str, Any]], output_dir: Path, user_dir: Path
 ) -> None:
-    """Copy images for a conversation to a subdirectory."""
+    """Copy conversation images to a subdirectory in the output location.
+
+    Args:
+        conversation_id: The conversation identifier for naming the
+            subdirectory.
+        images: List of image metadata dictionaries.
+        output_dir: Base output directory for processed conversations.
+        user_dir: Path to the user directory containing source images.
+    """
     if not images:
         return
 
@@ -417,7 +543,16 @@ def copy_conversation_images(
 
 
 def has_content(conversation: dict[str, Any], user_dir: Path) -> bool:
-    """Check if a conversation has any meaningful content."""
+    """Check whether a conversation contains meaningful content.
+
+    Args:
+        conversation: Dictionary containing the conversation data.
+        user_dir: Path to the user directory containing exported images.
+
+    Returns:
+        bool: `True` if the conversation has a title and messages, otherwise
+            `False`.
+    """
     if conversation.get("title", "").strip():
         mapping = conversation.get("mapping", {})
         messages = traverse_message_tree(mapping, user_dir)
@@ -428,14 +563,23 @@ def has_content(conversation: dict[str, Any], user_dir: Path) -> bool:
 
 @dataclass
 class Args(argparse.Namespace):
-    """Command-line arguments."""
+    """Command-line arguments.
+
+    Attributes:
+        input_dir: Directory containing the ChatGPT export data.
+        output_dir: Directory where Markdown files will be written.
+    """
 
     input_dir: Path = field(init=False)
     output_dir: Path = field(init=False)
 
 
 def parse_arguments() -> Args:
-    """Parse command-line arguments."""
+    """Parse command-line arguments.
+
+    Returns:
+        Args: Parsed command-line arguments.
+    """
     parser = argparse.ArgumentParser(
         description="convert data export from chatgpt.com to Markdown",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
@@ -458,6 +602,12 @@ def parse_arguments() -> Args:
 
 
 def main() -> None:
+    """Convert ChatGPT conversation exports to Markdown files.
+
+    Reads `conversations.json` from the input directory, converts each
+    conversation with content to Markdown, and writes the results to the output
+    directory along with any associated images.
+    """
     args = parse_arguments()
 
     conversations_path = args.input_dir.joinpath("conversations.json")

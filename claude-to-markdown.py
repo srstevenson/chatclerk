@@ -5,7 +5,6 @@
 # dependencies = []
 # ///
 
-
 """Convert data export from claude.ai to Markdown."""
 
 # pyright: reportAny=false, reportExplicitAny=false
@@ -24,7 +23,13 @@ logger = logging.getLogger(__name__)
 
 
 class Language(Enum):
-    """Supported language types for code blocks."""
+    """Supported language types for code block formatting.
+
+    Attributes:
+        JSON: JSON syntax highlighting.
+        XML: XML syntax highlighting.
+        TEXT: Plain text (no syntax highlighting).
+    """
 
     JSON = "json"
     XML = "xml"
@@ -33,27 +38,52 @@ class Language(Enum):
 
 @dataclass
 class ToolOutput:
-    """Represents formatted tool result content with optional language hint."""
+    """Representation of formatted tool result content with language hint.
+
+    Attributes:
+        text: The formatted text content.
+        language: Optional `Language` enum specifying syntax highlighting.
+    """
 
     text: str
     language: Language | None = None
 
     @property
     def code_block_language(self) -> str:
-        """Get the language identifier for markdown code blocks."""
+        """Get the language identifier for Markdown code blocks.
+
+        Returns:
+            str: `Language` identifier string, or empty string if no language
+                specified.
+        """
         if self.language is None:
             return ""
         return self.language.value
 
 
 def format_timestamp(timestamp_str: str) -> str:
-    """Convert ISO timestamp to readable format."""
+    """Convert an ISO 8601 timestamp to a human-readable string.
+
+    Args:
+        timestamp_str: ISO 8601 formatted timestamp string.
+
+    Returns:
+        str: Formatted timestamp string in the format `YYYY-MM-DD HH:MM:SS UTC`.
+    """
     timestamp = datetime.fromisoformat(timestamp_str)
     return timestamp.strftime("%Y-%m-%d %H:%M:%S UTC")
 
 
 def format_json_if_valid(text: str) -> ToolOutput:
-    """Try to parse and format text as JSON/XML with appropriate language hint."""
+    """Attempt to parse and format text as JSON or XML with syntax highlighting.
+
+    Args:
+        text: The text to analyse and format.
+
+    Returns:
+        ToolOutput: Formatted text with appropriate language hint for syntax
+            highlighting.
+    """
     text = text.strip()
     if not text:
         return ToolOutput(text=text, language=Language.TEXT)
@@ -72,7 +102,15 @@ def format_json_if_valid(text: str) -> ToolOutput:
 
 
 def format_citations(citations: list[dict[str, Any]]) -> str | None:
-    """Format citations as a markdown list."""
+    """Format citations as a numbered Markdown list.
+
+    Args:
+        citations: List of citation dictionaries.
+
+    Returns:
+        str | None: Formatted Markdown string of citations, or `None` if no
+            valid citations.
+    """
     if not citations:
         return None
 
@@ -93,7 +131,15 @@ def format_citations(citations: list[dict[str, Any]]) -> str | None:
 
 
 def format_artifact(item: dict[str, Any]) -> str | None:
-    """Format an artifact tool use as markdown."""
+    """Format an artifact tool use as Markdown.
+
+    Args:
+        item: Dictionary containing artifact data from tool use.
+
+    Returns:
+        str | None: Formatted Markdown string representing the artifact, or
+            `None` if empty.
+    """
     artifact_input = item["input"]
     artifact_title = artifact_input.get("title", "Untitled Artifact")
     artifact_type = artifact_input.get("type", "")
@@ -124,7 +170,15 @@ def format_artifact(item: dict[str, Any]) -> str | None:
 
 
 def _format_web_search_input(tool_input: dict[str, Any]) -> str | None:
-    """Format web_search tool input."""
+    """Format `web_search` tool input for display.
+
+    Args:
+        tool_input: Dictionary containing tool input parameters.
+
+    Returns:
+        str | None: Formatted search query string, or `None` if no query
+            present.
+    """
     query = tool_input.get("query", "")
     if query:
         logger.debug("  Web search: %s", query)
@@ -133,7 +187,14 @@ def _format_web_search_input(tool_input: dict[str, Any]) -> str | None:
 
 
 def _format_web_fetch_input(tool_input: dict[str, Any]) -> str | None:
-    """Format web_fetch tool input."""
+    """Format `web_fetch` tool input for display.
+
+    Args:
+        tool_input: Dictionary containing tool input parameters.
+
+    Returns:
+        str | None: Formatted URL string, or `None` if no URL present.
+    """
     url = tool_input.get("url", "")
     if url:
         logger.debug("  Web fetch: %s", url)
@@ -142,7 +203,14 @@ def _format_web_fetch_input(tool_input: dict[str, Any]) -> str | None:
 
 
 def _format_repl_input(tool_input: dict[str, Any]) -> str | None:
-    """Format repl tool input."""
+    """Format REPL tool input for display.
+
+    Args:
+        tool_input: Dictionary containing tool input parameters.
+
+    Returns:
+        str | None: Formatted code block string, or `None` if no code present.
+    """
     code = tool_input.get("code", "")
     if code:
         logger.debug("  REPL: %d chars", len(code))
@@ -151,7 +219,18 @@ def _format_repl_input(tool_input: dict[str, Any]) -> str | None:
 
 
 def format_tool_input(tool_name: str, tool_input: dict[str, Any]) -> str | None:
-    """Format tool input for display (for interesting tools only)."""
+    """Format tool input parameters for display.
+
+    Only formats inputs for selected tools that provide useful context.
+
+    Args:
+        tool_name: Name of the tool being used.
+        tool_input: Dictionary containing tool input parameters.
+
+    Returns:
+        str | None: Formatted input string, or `None` if tool not supported
+            or empty.
+    """
     if not tool_input:  # Can be empty dict
         return None
 
@@ -171,7 +250,16 @@ def format_tool_input(tool_name: str, tool_input: dict[str, Any]) -> str | None:
 def format_display_content(
     display_content: dict[str, Any], tool_name: str
 ) -> str | None:
-    """Format rich display content from tool results."""
+    """Format rich display content from tool results as Markdown.
+
+    Args:
+        display_content: Dictionary containing display content metadata.
+        tool_name: Name of the tool that generated the content.
+
+    Returns:
+        str | None: Formatted Markdown string, or `None` if no displayable
+            content.
+    """
     if not display_content:  # Can be null or empty
         return None
 
@@ -203,7 +291,16 @@ def format_display_content(
 
 
 def format_tool_result_text(result_text: str, tool_name: str) -> str | None:
-    """Format text content from a tool result."""
+    """Format text content from a tool result as a code block.
+
+    Args:
+        result_text: The text content returned by the tool.
+        tool_name: Name of the tool that generated the result.
+
+    Returns:
+        str | None: Formatted Markdown code block, or `None` if empty or just
+            `"OK"`.
+    """
     if not result_text or result_text == "OK":
         return None
 
@@ -217,7 +314,12 @@ def format_tool_result_text(result_text: str, tool_name: str) -> str | None:
 
 
 def _process_text_content(item: dict[str, Any], text_parts: list[str]) -> None:
-    """Process a 'text' content item and append to text_parts."""
+    """Process a text content item and append formatted text.
+
+    Args:
+        item: Dictionary containing text content and citations.
+        text_parts: List to append formatted text parts to.
+    """
     text = item["text"].strip()
     if text:
         text_parts.append(text)
@@ -228,7 +330,15 @@ def _process_text_content(item: dict[str, Any], text_parts: list[str]) -> None:
 
 
 def _process_tool_use(item: dict[str, Any], text_parts: list[str]) -> str:
-    """Process a 'tool_use' content item and return the tool name."""
+    """Process a `tool_use` content item and append formatted output.
+
+    Args:
+        item: Dictionary containing tool use data.
+        text_parts: List to append formatted tool use parts to.
+
+    Returns:
+        str: The name of the tool that was used.
+    """
     tool_name = item["name"]
 
     if tool_name == "artifacts":
@@ -245,7 +355,12 @@ def _process_tool_use(item: dict[str, Any], text_parts: list[str]) -> str:
 
 
 def _process_tool_result(item: dict[str, Any], text_parts: list[str]) -> None:
-    """Process a 'tool_result' content item and append formatted results."""
+    """Process a `tool_result` content item and append formatted output.
+
+    Args:
+        item: Dictionary containing tool result data.
+        text_parts: List to append formatted result parts to.
+    """
     tool_name = item["name"]
 
     display_text = format_display_content(item["display_content"], tool_name)
@@ -262,7 +377,17 @@ def _process_tool_result(item: dict[str, Any], text_parts: list[str]) -> None:
 
 
 def extract_text_from_content(content: list[dict[str, Any]]) -> str:
-    """Extract text content from a message's content array."""
+    """Extract and format text content from a message's content array.
+
+    Processes text, tool use, and tool result items into a unified Markdown
+    string.
+
+    Args:
+        content: List of content item dictionaries.
+
+    Returns:
+        str: Formatted Markdown string combining all content items.
+    """
     if not content:
         return ""
 
@@ -290,7 +415,14 @@ def extract_text_from_content(content: list[dict[str, Any]]) -> str:
 
 
 def format_file_item(file_item: dict[str, Any]) -> str:
-    """Format a single file/attachment item."""
+    """Format a single file or attachment item as Markdown.
+
+    Args:
+        file_item: Dictionary containing file metadata.
+
+    Returns:
+        str: Formatted Markdown list item with file details.
+    """
     file_name = file_item.get("file_name", "unknown")
     file_size = file_item.get("file_size", "")
     file_type = file_item.get("file_type", "")
@@ -305,7 +437,14 @@ def format_file_item(file_item: dict[str, Any]) -> str:
 
 
 def format_attachments(attachments: list[dict[str, Any]]) -> str | None:
-    """Format attachments list as markdown."""
+    """Format attachments list as Markdown.
+
+    Args:
+        attachments: List of attachment metadata dictionaries.
+
+    Returns:
+        str | None: Formatted Markdown list of attachments, or `None` if empty.
+    """
     if not attachments:
         return None
 
@@ -317,7 +456,14 @@ def format_attachments(attachments: list[dict[str, Any]]) -> str | None:
 
 
 def format_files(files: list[dict[str, Any]]) -> str | None:
-    """Format files list as markdown."""
+    """Format files list as Markdown.
+
+    Args:
+        files: List of file metadata dictionaries.
+
+    Returns:
+        str | None: Formatted Markdown list of files, or `None` if empty.
+    """
     if not files:
         return None
 
@@ -330,7 +476,14 @@ def format_files(files: list[dict[str, Any]]) -> str | None:
 
 
 def format_message(message: dict[str, Any]) -> str:
-    """Format a single chat message as markdown."""
+    """Format a single chat message as Markdown.
+
+    Args:
+        message: Dictionary containing message data.
+
+    Returns:
+        str: The formatted message as a Markdown string.
+    """
     sender = message["sender"]
     created_at = message["created_at"]
 
@@ -359,7 +512,14 @@ def format_message(message: dict[str, Any]) -> str:
 
 
 def convert_to_markdown(conversation: dict[str, Any]) -> str:
-    """Convert a single conversation object to markdown format."""
+    """Convert a Claude conversation to Markdown format.
+
+    Args:
+        conversation: Dictionary containing the conversation data.
+
+    Returns:
+        str: The formatted conversation as a Markdown string.
+    """
     uuid = conversation["uuid"]
     name = conversation["name"]
     created_at = format_timestamp(conversation["created_at"])
@@ -391,7 +551,15 @@ def convert_to_markdown(conversation: dict[str, Any]) -> str:
 
 
 def has_content(conversation: dict[str, Any]) -> bool:
-    """Check if a conversation has any meaningful content."""
+    """Check whether a conversation contains meaningful content.
+
+    Args:
+        conversation: Dictionary containing the conversation data.
+
+    Returns:
+        bool: `True` if the conversation has a name, messages, or attachments,
+            otherwise `False`.
+    """
     if conversation["name"].strip():
         return True
 
@@ -412,14 +580,23 @@ def has_content(conversation: dict[str, Any]) -> bool:
 
 @dataclass
 class Args(argparse.Namespace):
-    """Command-line arguments."""
+    """Command-line arguments.
+
+    Attributes:
+        input_dir: Directory containing the Claude export data.
+        output_dir: Directory where Markdown files will be written.
+    """
 
     input_dir: Path = field(init=False)
     output_dir: Path = field(init=False)
 
 
 def parse_arguments() -> Args:
-    """Parse command-line arguments."""
+    """Parse command-line arguments.
+
+    Returns:
+        Args: Parsed command-line arguments.
+    """
     parser = argparse.ArgumentParser(
         description="convert data export from claude.ai to Markdown",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
@@ -442,6 +619,12 @@ def parse_arguments() -> Args:
 
 
 def main() -> None:
+    """Convert Claude conversation exports to Markdown files.
+
+    Reads `conversations.json` from the input directory, converts each
+    conversation with content to Markdown, and writes the results to the output
+    directory.
+    """
     args = parse_arguments()
 
     conversations_path = args.input_dir.joinpath("conversations.json")
