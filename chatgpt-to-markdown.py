@@ -129,7 +129,7 @@ def _process_image_asset(part: dict[str, Any], user_dir: Path) -> tuple[str, Ima
     dalle_meta = part_metadata.get("dalle", {})
     gen_id = dalle_meta.get("gen_id")
 
-    asset_id = asset.replace("sediment://", "")
+    asset_id = asset.removeprefix("sediment://")
     matching_files = list(user_dir.glob(f"{asset_id}-*.png"))
     filename = matching_files[0].name if matching_files else f"{asset_id}.png"
 
