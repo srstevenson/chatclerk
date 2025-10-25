@@ -23,21 +23,12 @@ logging.basicConfig(level=logging.DEBUG, format="[%(levelname)-8s] %(message)s")
 logger = logging.getLogger(__name__)
 
 
-def find_chatgpt_user_dir(input_dir: Path) -> Path | None:
+def find_chatgpt_user_dir(input_dir: Path) -> Path:
     """Find the ChatGPT user directory containing exported images."""
-    if not input_dir.exists():
-        return None
-
-    user_dirs = list(input_dir.glob("user-*"))
-
-    if not user_dirs:
-        logger.warning("No user directory found in %s", input_dir)
-        return None
-
-    if len(user_dirs) > 1:
-        logger.warning("Multiple user directories found, using first: %s", user_dirs[0])
-
-    return user_dirs[0]
+    user_json_path = input_dir.joinpath("user.json")
+    with user_json_path.open() as f:
+        user_data = json.load(f)
+    return input_dir.joinpath(user_data["id"])
 
 
 def format_timestamp(timestamp: float) -> str:
@@ -70,7 +61,7 @@ def clean_text(text: str) -> str:
 
 
 def _process_image_asset(
-    part: dict[str, Any], user_dir: Path | None
+    part: dict[str, Any], user_dir: Path
 ) -> tuple[str, dict[str, Any]]:
     """Process an image asset pointer and return (placeholder_text, image_info)."""
     width = part.get("width", "unknown")
@@ -82,11 +73,8 @@ def _process_image_asset(
     gen_id = dalle_meta.get("gen_id", "")
 
     asset_id = asset.replace("sediment://", "")
-    filename = f"{asset_id}.png"
-    if user_dir:
-        matching_files = list(user_dir.glob(f"{asset_id}-*.png"))
-        if matching_files:
-            filename = matching_files[0].name
+    matching_files = list(user_dir.glob(f"{asset_id}-*.png"))
+    filename = matching_files[0].name if matching_files else f"{asset_id}.png"
 
     image_info = {
         "asset": asset,
@@ -107,7 +95,7 @@ def _process_multimodal_content(
     role: str,
     metadata: dict[str, Any],
     timestamp: float | None,
-    user_dir: Path | None,
+    user_dir: Path,
 ) -> Message | None:
     """Process multimodal_text content and return a Message if valid."""
     parts = content_obj.get("parts", [])
@@ -161,7 +149,7 @@ def _process_regular_content(
 
 
 def _process_message_content(
-    message: dict[str, Any], role: str, metadata: dict[str, Any], user_dir: Path | None
+    message: dict[str, Any], role: str, metadata: dict[str, Any], user_dir: Path
 ) -> Message | None:
     """Process message content and return a Message if valid."""
     content_obj = message.get("content", {})
@@ -181,9 +169,7 @@ def _process_message_content(
 
 
 def traverse_message_tree(
-    mapping: dict[str, Any],
-    start_id: str = "client-created-root",
-    user_dir: Path | None = None,
+    mapping: dict[str, Any], user_dir: Path, start_id: str = "client-created-root"
 ) -> list[Message]:
     """Traverse the message tree in depth-first order to extract messages.
 
@@ -345,7 +331,7 @@ def format_message(
 
 
 def convert_to_markdown(
-    conversation: dict[str, Any], user_dir: Path | None = None
+    conversation: dict[str, Any], user_dir: Path
 ) -> tuple[str, list[dict[str, Any]]]:
     """Convert a single conversation object to markdown format.
 
@@ -372,7 +358,7 @@ def convert_to_markdown(
     markdown += f"**Model:** {model_slug}\n\n"
 
     mapping = conversation.get("mapping", {})
-    messages = traverse_message_tree(mapping, user_dir=user_dir)
+    messages = traverse_message_tree(mapping, user_dir)
 
     messages = sorted(messages, key=lambda m: m.timestamp if m.timestamp else 0)
 
@@ -398,17 +384,10 @@ def convert_to_markdown(
 
 
 def copy_conversation_images(
-    conversation_id: str,
-    images: list[dict[str, Any]],
-    output_dir: Path,
-    user_dir: Path | None = None,
+    conversation_id: str, images: list[dict[str, Any]], output_dir: Path, user_dir: Path
 ) -> None:
     """Copy images for a conversation to a subdirectory."""
     if not images:
-        return
-
-    if not user_dir:
-        logger.warning("No user directory provided, cannot copy images")
         return
 
     image_dir = output_dir.joinpath(conversation_id)
@@ -437,11 +416,11 @@ def copy_conversation_images(
             logger.warning("  Image not found for asset: %s", asset_id)
 
 
-def has_content(conversation: dict[str, Any]) -> bool:
+def has_content(conversation: dict[str, Any], user_dir: Path) -> bool:
     """Check if a conversation has any meaningful content."""
     if conversation.get("title", "").strip():
         mapping = conversation.get("mapping", {})
-        messages = traverse_message_tree(mapping)
+        messages = traverse_message_tree(mapping, user_dir)
         return len(messages) > 0
 
     return False
@@ -488,10 +467,7 @@ def main() -> None:
     logger.info("Loaded %d conversations", len(conversations))
 
     user_dir = find_chatgpt_user_dir(args.input_dir)
-    if user_dir:
-        logger.info("Found user directory: %s", user_dir)
-    else:
-        logger.warning("No user directory found - images will not be embedded")
+    logger.info("Found user directory: %s", user_dir)
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -499,7 +475,7 @@ def main() -> None:
     skipped_count = 0
 
     for conversation in conversations:
-        if has_content(conversation):
+        if has_content(conversation, user_dir):
             conversation_id = conversation.get("conversation_id") or conversation.get(
                 "id", "unknown"
             )
