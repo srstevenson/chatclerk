@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 
-"""
-Convert Claude.ai conversations.json export to markdown files.
+"""Convert Claude.ai conversations.json export to markdown files.
 
 This script parses a conversations.json file from Claude.ai and creates
 individual markdown files for each conversation in a directory.
@@ -15,7 +14,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 logging.basicConfig(
     level=logging.DEBUG,
@@ -38,7 +37,7 @@ class ToolOutput:
     """Represents formatted tool result content with optional language hint."""
 
     text: str
-    language: Optional[Language] = None
+    language: Language | None = None
 
     @property
     def code_block_language(self) -> str:
@@ -75,7 +74,7 @@ def format_json_if_valid(text: str) -> ToolOutput:
         return ToolOutput(text=text, language=Language.TEXT)
 
 
-def format_citations(citations: list[dict[str, Any]]) -> Optional[str]:
+def format_citations(citations: list[dict[str, Any]]) -> str | None:
     """Format citations as a markdown list."""
     if not citations:
         return None
@@ -94,7 +93,7 @@ def format_citations(citations: list[dict[str, Any]]) -> Optional[str]:
     return None
 
 
-def format_artifact(item: dict[str, Any]) -> Optional[str]:
+def format_artifact(item: dict[str, Any]) -> str | None:
     """Format an artifact tool use as markdown."""
     artifact_input = item["input"]
     artifact_title = artifact_input.get("title", "Untitled Artifact")
@@ -125,11 +124,10 @@ def format_artifact(item: dict[str, Any]) -> Optional[str]:
 
     if lang:
         return f"{artifact_header}\n\n```{lang}\n{artifact_content.rstrip()}\n```"
-    else:
-        return f"{artifact_header}\n\n```\n{artifact_content.rstrip()}\n```"
+    return f"{artifact_header}\n\n```\n{artifact_content.rstrip()}\n```"
 
 
-def format_tool_input(tool_name: str, tool_input: dict[str, Any]) -> Optional[str]:
+def format_tool_input(tool_name: str, tool_input: dict[str, Any]) -> str | None:
     """Format tool input for display (for interesting tools only)."""
     if not tool_input:  # Can be empty dict
         return None
@@ -141,14 +139,14 @@ def format_tool_input(tool_name: str, tool_input: dict[str, Any]) -> Optional[st
             return f"*[Searching for: {query}]*"
         return None
 
-    elif tool_name == "web_fetch":
+    if tool_name == "web_fetch":
         url = tool_input.get("url", "")
         if url:
             logger.info(f"  Web fetch: {url}")
             return f"*[Fetching: {url}]*"
         return None
 
-    elif tool_name == "repl":
+    if tool_name == "repl":
         code = tool_input.get("code", "")
         if code:
             logger.info(f"  REPL: {len(code)} chars")
@@ -159,7 +157,7 @@ def format_tool_input(tool_name: str, tool_input: dict[str, Any]) -> Optional[st
 
 def format_display_content(
     display_content: dict[str, Any], tool_name: str
-) -> Optional[str]:
+) -> str | None:
     """Format rich display content from tool results."""
     if not display_content:  # Can be null or empty
         return None
@@ -191,7 +189,7 @@ def format_display_content(
     return None
 
 
-def format_tool_result_text(result_text: str, tool_name: str) -> Optional[str]:
+def format_tool_result_text(result_text: str, tool_name: str) -> str | None:
     """Format text content from a tool result."""
     if not result_text or result_text == "OK":
         return None
@@ -202,8 +200,7 @@ def format_tool_result_text(result_text: str, tool_name: str) -> Optional[str]:
 
     if lang:
         return f"*[Tool Result: {tool_name}]*\n```{lang}\n{clean_text}\n```"
-    else:
-        return f"*[Tool Result: {tool_name}]*\n```\n{clean_text}\n```"
+    return f"*[Tool Result: {tool_name}]*\n```\n{clean_text}\n```"
 
 
 def extract_text_from_content(content: list[dict[str, Any]]) -> str:
@@ -293,7 +290,7 @@ def format_file_item(file_item: dict[str, Any]) -> str:
     return info
 
 
-def format_attachments(attachments: list[dict[str, Any]]) -> Optional[str]:
+def format_attachments(attachments: list[dict[str, Any]]) -> str | None:
     """Format attachments list as markdown."""
     if not attachments:
         return None
@@ -306,7 +303,7 @@ def format_attachments(attachments: list[dict[str, Any]]) -> Optional[str]:
         return f"*[Attachments: {len(attachments)}]*\n" + "\n".join(attachment_info)
 
 
-def format_files(files: list[dict[str, Any]]) -> Optional[str]:
+def format_files(files: list[dict[str, Any]]) -> str | None:
     """Format files list as markdown."""
     if not files:
         return None
@@ -360,7 +357,6 @@ def format_message(message: dict[str, Any]) -> str:
 
 def convert_to_markdown(conversation: dict[str, Any]) -> str:
     """Convert a single conversation object to markdown format."""
-
     uuid = conversation["uuid"]
     name = conversation["name"]
     created_at = format_timestamp(conversation["created_at"])
@@ -390,7 +386,6 @@ def convert_to_markdown(conversation: dict[str, Any]) -> str:
 
 def has_content(conversation: dict[str, Any]) -> bool:
     """Check if a conversation has any meaningful content."""
-
     if conversation["name"].strip():
         return True
 
