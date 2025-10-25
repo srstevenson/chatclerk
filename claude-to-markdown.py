@@ -116,8 +116,7 @@ def format_citations(citations: list[dict[str, Any]]) -> str | None:
     citation_lines = ["", "*Citations:*"]
     for i, citation in enumerate(citations, 1):
         details = citation.get("details", {})  # details can be null
-        url = details.get("url", "")
-        if url:
+        if url := details.get("url", ""):
             citation_lines.append(f"{i}. [{url}]({url})")
 
     min_citation_lines = 2
@@ -176,8 +175,7 @@ def _format_web_search_input(tool_input: dict[str, Any]) -> str | None:
         str | None: Formatted search query string, or `None` if no query
             present.
     """
-    query = tool_input.get("query", "")
-    if query:
+    if query := tool_input.get("query", ""):
         logger.debug("Web search: %s", query)
         return f"*[Searching for: {query}]*"
     return None
@@ -192,8 +190,7 @@ def _format_web_fetch_input(tool_input: dict[str, Any]) -> str | None:
     Returns:
         str | None: Formatted URL string, or `None` if no URL present.
     """
-    url = tool_input.get("url", "")
-    if url:
+    if url := tool_input.get("url", ""):
         logger.debug("Web fetch: %s", url)
         return f"*[Fetching: {url}]*"
     return None
@@ -208,8 +205,7 @@ def _format_repl_input(tool_input: dict[str, Any]) -> str | None:
     Returns:
         str | None: Formatted code block string, or `None` if no code present.
     """
-    code = tool_input.get("code", "")
-    if code:
+    if code := tool_input.get("code", ""):
         logger.debug("REPL: %d chars", len(code))
         return f"*[Code executed]*\n```javascript\n{code.strip()}\n```"
     return None
@@ -272,8 +268,7 @@ def format_display_content(
             return f"*[Tool Result: {tool_name}]*\n- [{title}]({url})"
 
     elif display_type == "rich_content":
-        content_items = display_content.get("content", [])
-        if content_items:
+        if content_items := display_content.get("content", []):
             links: list[str] = []
             for content_item in content_items:
                 title = content_item.get("title", "")
@@ -317,12 +312,10 @@ def _process_text_content(item: dict[str, Any], text_parts: list[str]) -> None:
         item: Dictionary containing text content and citations.
         text_parts: List to append formatted text parts to.
     """
-    text = item["text"].strip()
-    if text:
+    if text := item["text"].strip():
         text_parts.append(text)
 
-    citations_text = format_citations(item["citations"])
-    if citations_text:
+    if citations_text := format_citations(item["citations"]):
         text_parts.append(citations_text)
 
 
@@ -339,14 +332,13 @@ def _process_tool_use(item: dict[str, Any], text_parts: list[str]) -> str:
     tool_name = item["name"]
 
     if tool_name == "artifacts":
-        artifact_text = format_artifact(item)
-        if artifact_text:
+        if artifact_text := format_artifact(item):
             text_parts.append(artifact_text)
 
-    elif tool_name in ["web_search", "web_fetch", "repl"]:
-        tool_input_text = format_tool_input(tool_name, item["input"])
-        if tool_input_text:
-            text_parts.append(tool_input_text)
+    elif tool_name in ["web_search", "web_fetch", "repl"] and (
+        tool_input_text := format_tool_input(tool_name, item["input"])
+    ):
+        text_parts.append(tool_input_text)
 
     return tool_name
 
@@ -360,17 +352,18 @@ def _process_tool_result(item: dict[str, Any], text_parts: list[str]) -> None:
     """
     tool_name = item["name"]
 
-    display_text = format_display_content(item["display_content"], tool_name)
-    if display_text:
+    if display_text := format_display_content(item["display_content"], tool_name):
         text_parts.append(display_text)
 
     result_content = item["content"]
     if isinstance(result_content, list):
-        for result_item in result_content:  # pyright: ignore[reportUnknownVariableType]
-            if isinstance(result_item, dict) and result_item.get("type") == "text":  # pyright: ignore[reportUnknownMemberType]
-                result_text = format_tool_result_text(result_item["text"], tool_name)  # pyright: ignore[reportUnknownArgumentType]
-                if result_text:
-                    text_parts.append(result_text)
+        text_parts.extend(
+            result_text
+            for result_item in result_content  # pyright: ignore[reportUnknownVariableType]
+            if isinstance(result_item, dict)
+            and result_item.get("type") == "text"  # pyright: ignore[reportUnknownMemberType]
+            and (result_text := format_tool_result_text(result_item["text"], tool_name))  # pyright: ignore[reportUnknownArgumentType]
+        )
 
 
 def extract_text_from_content(content: list[dict[str, Any]]) -> str:
@@ -497,12 +490,10 @@ def format_message(message: dict[str, Any]) -> str:
     if content:
         content_parts.append(content)
 
-    attachments_text = format_attachments(message["attachments"])
-    if attachments_text:
+    if attachments_text := format_attachments(message["attachments"]):
         content_parts.append(attachments_text)
 
-    files_text = format_files(message["files"])
-    if files_text:
+    if files_text := format_files(message["files"]):
         content_parts.append(files_text)
 
     return f"{header}\n\n*{timestamp}*\n\n" + "\n\n".join(content_parts)
@@ -538,12 +529,11 @@ def convert_to_markdown(conversation: dict[str, Any]) -> str:
     ]
 
     messages: list[dict[str, Any]] = conversation["chat_messages"]
-    message_blocks: list[str] = []
-
-    for message in messages:
-        message_block = format_message(message)
-        if message_block:
-            message_blocks.append(message_block)
+    message_blocks = [
+        message_block
+        for message in messages
+        if (message_block := format_message(message))
+    ]
 
     # Combine header and messages
     header = "\n".join(header_parts)

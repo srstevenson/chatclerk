@@ -174,8 +174,8 @@ def _process_multimodal_content(
                 placeholder, image_info = _process_image_asset(part, user_dir)  # pyright: ignore[reportUnknownArgumentType]
                 content_items.append(placeholder)
                 image_list.append(image_info)
-        elif isinstance(part, str) and part.strip():
-            content_items.append(part.strip())
+        elif isinstance(part, str) and (stripped := part.strip()):
+            content_items.append(stripped)
 
     if content_items or image_list:
         content = "\n\n".join(content_items) if content_items else ""
@@ -280,19 +280,18 @@ def traverse_message_tree(
             return
 
         node = mapping[node_id]
-        message = node.get("message")
 
-        if message:
+        if message := node.get("message"):
             author = message.get("author", {})
             role = author.get("role", "")
             metadata = message.get("metadata", {})
 
             if metadata.get("is_visually_hidden_from_conversation"):
                 logger.debug("Skipping hidden message: %s", role)
-            elif role in ["user", "assistant", "tool"]:
-                msg = _process_message_content(message, role, metadata, user_dir)
-                if msg:
-                    messages.append(msg)
+            elif role in ["user", "assistant", "tool"] and (
+                msg := _process_message_content(message, role, metadata, user_dir)
+            ):
+                messages.append(msg)
 
         children = node.get("children", [])
         for child_id in children:
@@ -447,12 +446,10 @@ def format_message(
             )
             content_parts.append(image_md)
 
-    search_results = format_search_results(message.metadata)
-    if search_results:
+    if search_results := format_search_results(message.metadata):
         content_parts.append(search_results)
 
-    citations = format_citations(message.metadata)
-    if citations:
+    if citations := format_citations(message.metadata):
         content_parts.append(citations)
 
     content = "\n\n".join(content_parts)
