@@ -126,8 +126,8 @@ def _process_multimodal_content(
 ) -> Message | None:
     """Process multimodal_text content and return a Message if valid."""
     parts = content_obj.get("parts", [])
-    content_items = []
-    image_list = []
+    content_items: list[str] = []
+    image_list: list[dict[str, Any]] = []
 
     for part in parts:
         if isinstance(part, dict):
@@ -343,7 +343,7 @@ def format_message(
         timestamp_str = f"\n\n*{format_timestamp(message.timestamp)}*"
 
     # Build content parts
-    content_parts = []
+    content_parts: list[str] = []
 
     # Add main content (with JSON formatting if applicable)
     if message.content:
@@ -422,13 +422,13 @@ def convert_to_markdown(
     logger.info("  Extracted %d visible messages", len(messages))
 
     # Collect all images from messages
-    all_images = []
+    all_images: list[dict[str, Any]] = []
     for message in messages:
         if message.images:
             all_images.extend(message.images)
 
     # Format each message with proper image indexing
-    message_blocks = []
+    message_blocks: list[str] = []
     image_counter = 0
     for message in messages:
         message_block = format_message(message, conversation_id, image_counter)
