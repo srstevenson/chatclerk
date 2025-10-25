@@ -590,21 +590,20 @@ def parse_arguments() -> Args:
         Args: Parsed command-line arguments.
     """
     parser = argparse.ArgumentParser(
-        description="convert data export from claude.ai to Markdown",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+        description="convert data export from claude.ai to Markdown"
     )
     parser.add_argument(
         "-i",
         "--input-dir",
         type=Path,
-        default=Path("raw-logs/claude"),
+        required=True,
         help="directory containing claude.ai export",
     )
     parser.add_argument(
         "-o",
         "--output-dir",
         type=Path,
-        default=Path("processed-logs/claude"),
+        required=True,
         help="directory to write Markdown files",
     )
     parser.add_argument(

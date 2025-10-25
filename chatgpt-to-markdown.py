@@ -595,21 +595,20 @@ def parse_arguments() -> Args:
         Args: Parsed command-line arguments.
     """
     parser = argparse.ArgumentParser(
-        description="convert data export from chatgpt.com to Markdown",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+        description="convert data export from chatgpt.com to Markdown"
     )
     parser.add_argument(
         "-i",
         "--input-dir",
         type=Path,
-        default=Path("raw-logs/chatgpt"),
+        required=True,
         help="directory containing chatgpt.com export",
     )
     parser.add_argument(
         "-o",
         "--output-dir",
         type=Path,
-        default=Path("processed-logs/chatgpt"),
+        required=True,
         help="directory to write Markdown files",
     )
     parser.add_argument(
