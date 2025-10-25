@@ -81,19 +81,6 @@ def clean_text(text: str) -> str:
     return cleaned
 
 
-def _should_skip_tool_message(role: str, content: str) -> bool:
-    """Check if a tool message should be skipped based on unhelpful phrases."""
-    if role != "tool":
-        return False
-
-    skip_phrases = [
-        "GPT-4o returned",
-        "Model set context updated",
-        "From now on, do not say or show ANYTHING",
-    ]
-    return any(phrase in content for phrase in skip_phrases)
-
-
 def _process_image_asset(
     part: dict[str, Any], user_dir: Path | None
 ) -> tuple[str, dict[str, Any]]:
@@ -180,11 +167,6 @@ def _process_regular_content(
     # Clean ChatGPT's internal formatting characters
     content = clean_text(content)
     content_stripped = content.strip()
-
-    # Skip unhelpful tool status messages
-    if _should_skip_tool_message(role, content_stripped):
-        logger.debug("  Skipping tool status message")
-        return None
 
     if content_stripped:
         return Message(
