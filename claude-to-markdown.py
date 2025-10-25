@@ -422,12 +422,14 @@ def main() -> None:
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument(
+        "-i",
         "--input-dir",
         type=Path,
         default=Path("raw-logs/claude"),
         help="directory containing claude.ai export",
     )
     parser.add_argument(
+        "-o",
         "--output-dir",
         type=Path,
         default=Path("processed-logs/claude"),
