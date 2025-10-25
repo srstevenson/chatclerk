@@ -1,7 +1,7 @@
 [project]
 name = "chatclerk"
 version = "0.1.0"
-description = "Convert LLM chat exports to Markdown"
+description = "Convert LLM chat exports to Markdown, preserving conversation structure and artefacts."
 readme = "README.md"
 authors = [{ name = "Scott Stevenson", email = "scott@stevenson.io" }]
 requires-python = ">=3.14"
