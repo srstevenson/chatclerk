@@ -18,7 +18,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-logging.basicConfig(level=logging.DEBUG, format="[%(levelname)-8s] %(message)s")
 logger = logging.getLogger(__name__)
 
 
@@ -584,10 +583,12 @@ class Args(argparse.Namespace):
     Attributes:
         input_dir: Directory containing the ChatGPT export data.
         output_dir: Directory where Markdown files will be written.
+        verbose: Enable verbose logging.
     """
 
     input_dir: Path = field(init=False)
     output_dir: Path = field(init=False)
+    verbose: bool = False
 
 
 def parse_arguments() -> Args:
@@ -614,6 +615,9 @@ def parse_arguments() -> Args:
         default=Path("processed-logs/chatgpt"),
         help="directory to write Markdown files",
     )
+    parser.add_argument(
+        "-v", "--verbose", action="store_true", help="enable verbose logging"
+    )
     return parser.parse_args(namespace=Args())
 
 
@@ -625,6 +629,9 @@ def main() -> None:
     directory along with any associated images.
     """
     args = parse_arguments()
+
+    log_level = logging.DEBUG if args.verbose else logging.INFO
+    logging.basicConfig(level=log_level, format="[%(levelname)-8s] %(message)s")
 
     conversations_path = args.input_dir.joinpath("conversations.json")
     with conversations_path.open() as f:
@@ -659,7 +666,7 @@ def main() -> None:
             conv_id = conversation.get("conversation_id") or conversation.get(
                 "id", "unknown"
             )
-            logger.info("Skipping empty conversation (%s)", conv_id)
+            logger.debug("Skipping empty conversation (%s)", conv_id)
             skipped_count += 1
 
     logger.info(
