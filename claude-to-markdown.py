@@ -55,7 +55,7 @@ class ToolOutput:
 
 def format_timestamp(timestamp_str: str) -> str:
     """Convert ISO timestamp to readable format."""
-    timestamp = datetime.fromisoformat(timestamp_str.replace("Z", "+00:00"))
+    timestamp = datetime.fromisoformat(timestamp_str)
     return timestamp.strftime("%Y-%m-%d %H:%M:%S UTC")
 
 
@@ -70,7 +70,7 @@ def format_json_if_valid(text: str) -> ToolOutput:
         return ToolOutput(text=text, language=Language.XML)
 
     # Check if it looks like JSON (starts with { or [).
-    if not (text.startswith("{") or text.startswith("[")):
+    if not text.startswith(("{", "[")):
         return ToolOutput(text=text, language=Language.TEXT)
 
     try:
@@ -93,8 +93,11 @@ def format_citations(citations: list[dict[str, Any]]) -> str | None:
             citation_lines.append(f"{i}. [{url}]({url})")
 
     # Only return if we have actual citations
-    if len(citation_lines) > 2:
-        logger.info(f"  Formatted {len(citation_lines) - 2} citations")
+    min_citation_lines = 2
+    if len(citation_lines) > min_citation_lines:
+        logger.info(
+            "  Formatted %d citations", len(citation_lines) - min_citation_lines
+        )
         return "\n".join(citation_lines)
     return None
 
@@ -110,7 +113,7 @@ def format_artifact(item: dict[str, Any]) -> str | None:
     if not artifact_content:
         return None
 
-    logger.info(f"  Artifact: {artifact_title}")
+    logger.info("  Artifact: %s", artifact_title)
 
     # Format the artifact header
     artifact_header = f"### Artifact: {artifact_title}"
@@ -133,30 +136,48 @@ def format_artifact(item: dict[str, Any]) -> str | None:
     return f"{artifact_header}\n\n```\n{artifact_content.rstrip()}\n```"
 
 
+def _format_web_search_input(tool_input: dict[str, Any]) -> str | None:
+    """Format web_search tool input."""
+    query = tool_input.get("query", "")
+    if query:
+        logger.info("  Web search: %s", query)
+        return f"*[Searching for: {query}]*"
+    return None
+
+
+def _format_web_fetch_input(tool_input: dict[str, Any]) -> str | None:
+    """Format web_fetch tool input."""
+    url = tool_input.get("url", "")
+    if url:
+        logger.info("  Web fetch: %s", url)
+        return f"*[Fetching: {url}]*"
+    return None
+
+
+def _format_repl_input(tool_input: dict[str, Any]) -> str | None:
+    """Format repl tool input."""
+    code = tool_input.get("code", "")
+    if code:
+        logger.info("  REPL: %d chars", len(code))
+        return f"*[Code executed]*\n```javascript\n{code.strip()}\n```"
+    return None
+
+
 def format_tool_input(tool_name: str, tool_input: dict[str, Any]) -> str | None:
     """Format tool input for display (for interesting tools only)."""
     if not tool_input:  # Can be empty dict
         return None
 
-    if tool_name == "web_search":
-        query = tool_input.get("query", "")
-        if query:
-            logger.info(f"  Web search: {query}")
-            return f"*[Searching for: {query}]*"
-        return None
+    # Dispatch to specific tool handlers
+    handlers = {
+        "web_search": _format_web_search_input,
+        "web_fetch": _format_web_fetch_input,
+        "repl": _format_repl_input,
+    }
 
-    if tool_name == "web_fetch":
-        url = tool_input.get("url", "")
-        if url:
-            logger.info(f"  Web fetch: {url}")
-            return f"*[Fetching: {url}]*"
-        return None
-
-    if tool_name == "repl":
-        code = tool_input.get("code", "")
-        if code:
-            logger.info(f"  REPL: {len(code)} chars")
-            return f"*[Code executed]*\n```javascript\n{code.strip()}\n```"
+    handler = handlers.get(tool_name)
+    if handler:
+        return handler(tool_input)
 
     return None
 
@@ -169,14 +190,14 @@ def format_display_content(
         return None
 
     display_type = display_content.get("type", "")
-    logger.info(f"  Display_content: type={display_type}, tool={tool_name}")
+    logger.info("  Display_content: type=%s, tool=%s", display_type, tool_name)
 
     if display_type == "rich_link":
         link = display_content.get("link", {})
         url = link.get("url", "")
         title = link.get("title", url)
         if url:
-            logger.info(f"  Rich link: {title}")
+            logger.info("  Rich link: %s", title)
             return f"*[Tool Result: {tool_name}]*\n- [{title}]({url})"
 
     elif display_type == "rich_content":
@@ -189,7 +210,7 @@ def format_display_content(
                 if title and url:
                     links.append(f"- [{title}]({url})")
             if links:
-                logger.info(f"  Rich content: {len(links)} items")
+                logger.info("  Rich content: %d items", len(links))
                 return f"*[Tool Result: {tool_name}]*\n" + "\n".join(links)
 
     return None
@@ -209,6 +230,56 @@ def format_tool_result_text(result_text: str, tool_name: str) -> str | None:
     return f"*[Tool Result: {tool_name}]*\n```\n{clean_text}\n```"
 
 
+def _process_text_content(item: dict[str, Any], text_parts: list[str]) -> None:
+    """Process a 'text' content item and append to text_parts."""
+    text = item["text"].strip()
+    if text:
+        text_parts.append(text)
+
+    # Handle citations if present (always present but often empty)
+    citations_text = format_citations(item["citations"])
+    if citations_text:
+        text_parts.append(citations_text)
+
+
+def _process_tool_use(item: dict[str, Any], text_parts: list[str]) -> str:
+    """Process a 'tool_use' content item and return the tool name."""
+    tool_name = item["name"]
+
+    # Handle artifacts
+    if tool_name == "artifacts":
+        artifact_text = format_artifact(item)
+        if artifact_text:
+            text_parts.append(artifact_text)
+
+    # Handle other interesting tools
+    elif tool_name in ["web_search", "web_fetch", "repl"]:
+        tool_input_text = format_tool_input(tool_name, item["input"])
+        if tool_input_text:
+            text_parts.append(tool_input_text)
+
+    return tool_name
+
+
+def _process_tool_result(item: dict[str, Any], text_parts: list[str]) -> None:
+    """Process a 'tool_result' content item and append formatted results."""
+    tool_name = item["name"]
+
+    # Check for display_content first (rich formatted results)
+    display_text = format_display_content(item["display_content"], tool_name)
+    if display_text:
+        text_parts.append(display_text)
+
+    # Extract text from tool results
+    result_content = item["content"]
+    if isinstance(result_content, list):
+        for result_item in result_content:
+            if isinstance(result_item, dict) and result_item.get("type") == "text":
+                result_text = format_tool_result_text(result_item["text"], tool_name)
+                if result_text:
+                    text_parts.append(result_text)
+
+
 def extract_text_from_content(content: list[dict[str, Any]]) -> str:
     """Extract text content from a message's content array."""
     if not content:
@@ -221,62 +292,18 @@ def extract_text_from_content(content: list[dict[str, Any]]) -> str:
         content_type = item["type"]
 
         if content_type == "text":
-            text = item["text"].strip()
-            if text:
-                text_parts.append(text)
-
-            # Handle citations if present (always present but often empty)
-            citations_text = format_citations(item["citations"])
-            if citations_text:
-                text_parts.append(citations_text)
-
+            _process_text_content(item, text_parts)
         elif content_type == "tool_use":
-            tool_name = item["name"]
+            tool_name = _process_tool_use(item, text_parts)
             tool_uses.append(tool_name)
-
-            # Handle artifacts
-            if tool_name == "artifacts":
-                artifact_text = format_artifact(item)
-                if artifact_text:
-                    text_parts.append(artifact_text)
-
-            # Handle other interesting tools
-            elif tool_name in ["web_search", "web_fetch", "repl"]:
-                tool_input_text = format_tool_input(tool_name, item["input"])
-                if tool_input_text:
-                    text_parts.append(tool_input_text)
-
         elif content_type == "tool_result":
-            tool_name = item["name"]
-
-            # Check for display_content first (rich formatted results)
-            display_text = format_display_content(item["display_content"], tool_name)
-            if display_text:
-                text_parts.append(display_text)
-
-            # Extract text from tool results
-            result_content = item["content"]
-            if isinstance(result_content, list):
-                for result_item in result_content:
-                    if (
-                        isinstance(result_item, dict)
-                        and result_item.get("type")
-                        == "text"  # type might not be present in all result items
-                    ):
-                        result_text = format_tool_result_text(
-                            result_item["text"], tool_name
-                        )
-                        if result_text:
-                            text_parts.append(result_text)
+            _process_tool_result(item, text_parts)
 
     result = "\n\n".join(text_parts)
 
     if tool_uses:
         tool_summary = f"*[Used tools: {', '.join(tool_uses)}]*"
-        if result:
-            result = f"{result}\n\n{tool_summary}"
-        else:
-            result = tool_summary
+        result = f"{result}\n\n{tool_summary}" if result else tool_summary
 
     return result
 
@@ -301,12 +328,11 @@ def format_attachments(attachments: list[dict[str, Any]]) -> str | None:
     if not attachments:
         return None
 
-    attachment_info: list[str] = []
-    for attachment in attachments:
-        attachment_info.append(format_file_item(attachment))
+    attachment_info = [format_file_item(attachment) for attachment in attachments]
 
     if attachment_info:
         return f"*[Attachments: {len(attachments)}]*\n" + "\n".join(attachment_info)
+    return None
 
 
 def format_files(files: list[dict[str, Any]]) -> str | None:
@@ -314,9 +340,7 @@ def format_files(files: list[dict[str, Any]]) -> str | None:
     if not files:
         return None
 
-    file_info: list[str] = []
-    for file in files:
-        file_info.append(format_file_item(file))
+    file_info = [format_file_item(file) for file in files]
 
     if file_info:
         return f"*[Files: {len(files)}]*\n" + "\n".join(file_info)
@@ -329,7 +353,7 @@ def format_message(message: dict[str, Any]) -> str:
     sender = message["sender"]
     created_at = message["created_at"]
 
-    logger.info(f"  Message: {sender} ({len(message['content'])} items)")
+    logger.info("  Message: %s (%d items)", sender, len(message["content"]))
 
     header = f"## {sender.title()}"
     timestamp = format_timestamp(created_at)
@@ -356,9 +380,7 @@ def format_message(message: dict[str, Any]) -> str:
         content_parts.append(files_text)
 
     # Assemble the final message block
-    message_block = f"{header}\n\n*{timestamp}*\n\n" + "\n\n".join(content_parts)
-
-    return message_block
+    return f"{header}\n\n*{timestamp}*\n\n" + "\n\n".join(content_parts)
 
 
 def convert_to_markdown(conversation: dict[str, Any]) -> str:
@@ -369,7 +391,10 @@ def convert_to_markdown(conversation: dict[str, Any]) -> str:
     updated_at = format_timestamp(conversation["updated_at"])
 
     logger.info(
-        f"Converting conversation: {name} ({uuid}, {len(conversation['chat_messages'])} messages)"
+        "Converting conversation: %s (%s, %d messages)",
+        name,
+        uuid,
+        len(conversation["chat_messages"]),
     )
 
     markdown = f"# {name}\n\n"
@@ -411,10 +436,11 @@ def has_content(conversation: dict[str, Any]) -> bool:
 
 
 def main() -> None:
-    with open("raw-logs/claude/conversations.json") as f:
+    conversations_path = Path("raw-logs/claude/conversations.json")
+    with conversations_path.open() as f:
         conversations = json.load(f)
 
-    logger.info(f"Loaded {len(conversations)} conversations")
+    logger.info("Loaded %d conversations", len(conversations))
 
     output_dir = Path("processed-logs/claude")
     output_dir.mkdir(exist_ok=True)
@@ -431,10 +457,12 @@ def main() -> None:
 
             exported_count += 1
         else:
-            logger.info(f"Skipping empty conversation ({conversation['uuid']})")
+            logger.info("Skipping empty conversation (%s)", conversation["uuid"])
             skipped_count += 1
 
-    logger.info(f"Export complete: {exported_count} exported, {skipped_count} skipped")
+    logger.info(
+        "Export complete: %d exported, %d skipped", exported_count, skipped_count
+    )
 
 
 if __name__ == "__main__":

@@ -18,7 +18,7 @@ import json
 import logging
 import shutil
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -44,14 +44,14 @@ def find_chatgpt_user_dir() -> Path | None:
         return None
 
     if len(user_dirs) > 1:
-        logger.warning(f"Multiple user directories found, using first: {user_dirs[0]}")
+        logger.warning("Multiple user directories found, using first: %s", user_dirs[0])
 
     return user_dirs[0]
 
 
 def format_timestamp(timestamp: float) -> str:
     """Convert Unix timestamp to readable format."""
-    dt = datetime.fromtimestamp(timestamp)
+    dt = datetime.fromtimestamp(timestamp, tz=UTC)
     return dt.strftime("%Y-%m-%d %H:%M:%S UTC")
 
 
@@ -70,13 +70,151 @@ def clean_text(text: str) -> str:
     """Remove ChatGPT's internal formatting characters from text."""
     # Remove Private Use Area characters (U+E000 to U+F8FF)
     # These are invisible markers ChatGPT uses internally but filters on their website
+    private_use_start = 0xE000
+    private_use_end = 0xF8FF
     cleaned = ""
     for char in text:
         code = ord(char)
         # Keep normal characters and emojis, skip private use area
-        if not (0xE000 <= code <= 0xF8FF):
+        if not (private_use_start <= code <= private_use_end):
             cleaned += char
     return cleaned
+
+
+def _should_skip_tool_message(role: str, content: str) -> bool:
+    """Check if a tool message should be skipped based on unhelpful phrases."""
+    if role != "tool":
+        return False
+
+    skip_phrases = [
+        "GPT-4o returned",
+        "Model set context updated",
+        "From now on, do not say or show ANYTHING",
+    ]
+    return any(phrase in content for phrase in skip_phrases)
+
+
+def _process_image_asset(
+    part: dict[str, Any], user_dir: Path | None
+) -> tuple[str, dict[str, Any]]:
+    """Process an image asset pointer and return (placeholder_text, image_info)."""
+    width = part.get("width", "unknown")
+    height = part.get("height", "unknown")
+    asset = part.get("asset_pointer", "")
+
+    # Extract metadata
+    part_metadata = part.get("metadata", {})
+    dalle_meta = part_metadata.get("dalle", {})
+    gen_id = dalle_meta.get("gen_id", "")
+
+    # Find the original filename
+    asset_id = asset.replace("sediment://", "")
+    filename = f"{asset_id}.png"  # Default
+    if user_dir:
+        matching_files = list(user_dir.glob(f"{asset_id}-*.png"))
+        if matching_files:
+            filename = matching_files[0].name
+
+    # Store image info for later processing
+    image_info = {
+        "asset": asset,
+        "width": width,
+        "height": height,
+        "gen_id": gen_id,
+        "filename": filename,
+    }
+
+    placeholder = f"*[Generated Image: {width}x{height}]*"
+    logger.info("  Found generated image: %sx%s", width, height)
+
+    return placeholder, image_info
+
+
+def _process_multimodal_content(
+    content_obj: dict[str, Any],
+    role: str,
+    metadata: dict[str, Any],
+    timestamp: float | None,
+    user_dir: Path | None,
+) -> Message | None:
+    """Process multimodal_text content and return a Message if valid."""
+    parts = content_obj.get("parts", [])
+    content_items = []
+    image_list = []
+
+    for part in parts:
+        if isinstance(part, dict):
+            part_type = part.get("content_type", "")
+            if part_type == "image_asset_pointer":
+                placeholder, image_info = _process_image_asset(part, user_dir)
+                content_items.append(placeholder)
+                image_list.append(image_info)
+        elif isinstance(part, str) and part.strip():
+            content_items.append(part.strip())
+
+    if content_items or image_list:
+        content = "\n\n".join(content_items) if content_items else ""
+        content = clean_text(content)
+
+        return Message(
+            role=role,
+            content=content,
+            timestamp=timestamp,
+            metadata=metadata,
+            images=image_list,
+        )
+
+    return None
+
+
+def _process_regular_content(
+    content_obj: dict[str, Any],
+    role: str,
+    metadata: dict[str, Any],
+    timestamp: float | None,
+) -> Message | None:
+    """Process regular text content and return a Message if valid."""
+    parts = content_obj.get("parts", [])
+    content = "\n".join(str(part) for part in parts if part)
+
+    # Clean ChatGPT's internal formatting characters
+    content = clean_text(content)
+    content_stripped = content.strip()
+
+    # Skip unhelpful tool status messages
+    if _should_skip_tool_message(role, content_stripped):
+        logger.debug("  Skipping tool status message")
+        return None
+
+    if content_stripped:
+        return Message(
+            role=role, content=content_stripped, timestamp=timestamp, metadata=metadata
+        )
+
+    return None
+
+
+def _process_message_content(
+    message: dict[str, Any], role: str, metadata: dict[str, Any], user_dir: Path | None
+) -> Message | None:
+    """Process message content and return a Message if valid."""
+    content_obj = message.get("content", {})
+    content_type = content_obj.get("content_type", "")
+    timestamp = message.get("create_time")
+
+    # Skip user_editable_context messages (user profile/instructions)
+    if content_type == "user_editable_context":
+        logger.debug("  Skipping user context message")
+        return None
+
+    # Handle multimodal content (images, etc.)
+    if content_type == "multimodal_text":
+        return _process_multimodal_content(
+            content_obj, role, metadata, timestamp, user_dir
+        )
+
+    # Handle regular text content
+    return _process_regular_content(content_obj, role, metadata, timestamp)
 
 
 def traverse_message_tree(
@@ -101,117 +239,15 @@ def traverse_message_tree(
         if message:
             author = message.get("author", {})
             role = author.get("role", "")
+            metadata = message.get("metadata", {})
 
             # Skip system messages that are visually hidden
-            metadata = message.get("metadata", {})
             if metadata.get("is_visually_hidden_from_conversation"):
-                logger.debug(f"  Skipping hidden message: {role}")
+                logger.debug("  Skipping hidden message: %s", role)
             elif role in ["user", "assistant", "tool"]:
-                # Extract content from parts
-                content_obj = message.get("content", {})
-                content_type = content_obj.get("content_type", "")
-
-                # Skip user_editable_context messages (user profile/instructions)
-                if content_type == "user_editable_context":
-                    logger.debug("  Skipping user context message")
-
-                # Handle multimodal content (images, etc.)
-                elif content_type == "multimodal_text":
-                    parts = content_obj.get("parts", [])
-                    content_items = []
-                    image_list = []
-
-                    for part in parts:
-                        if isinstance(part, dict):
-                            part_type = part.get("content_type", "")
-                            if part_type == "image_asset_pointer":
-                                width = part.get("width", "unknown")
-                                height = part.get("height", "unknown")
-                                asset = part.get("asset_pointer", "")
-
-                                # Extract metadata
-                                part_metadata = part.get("metadata", {})
-                                dalle_meta = part_metadata.get("dalle", {})
-                                gen_id = dalle_meta.get("gen_id", "")
-
-                                # Find the original filename
-                                asset_id = asset.replace("sediment://", "")
-                                filename = f"{asset_id}.png"  # Default
-                                if user_dir:
-                                    matching_files = list(
-                                        user_dir.glob(f"{asset_id}-*.png")
-                                    )
-                                    if matching_files:
-                                        filename = matching_files[0].name
-
-                                # Store image info for later processing
-                                image_info = {
-                                    "asset": asset,
-                                    "width": width,
-                                    "height": height,
-                                    "gen_id": gen_id,
-                                    "filename": filename,
-                                }
-                                image_list.append(image_info)
-
-                                # Add placeholder text (will be replaced with image link)
-                                content_items.append(
-                                    f"*[Generated Image: {width}x{height}]*"
-                                )
-                                logger.info(
-                                    f"  Found generated image: {width}x{height}"
-                                )
-                        elif isinstance(part, str) and part.strip():
-                            content_items.append(part.strip())
-
-                    if content_items or image_list:
-                        content = "\n\n".join(content_items) if content_items else ""
-                        content = clean_text(content)
-                        timestamp = message.get("create_time")
-
-                        messages.append(
-                            Message(
-                                role=role,
-                                content=content,
-                                timestamp=timestamp,
-                                metadata=metadata,
-                                images=image_list,
-                            )
-                        )
-
-                # Handle regular text content
-                else:
-                    parts = content_obj.get("parts", [])
-                    content = "\n".join(str(part) for part in parts if part)
-
-                    # Clean ChatGPT's internal formatting characters
-                    content = clean_text(content)
-
-                    # Only include messages with non-empty content
-                    content_stripped = content.strip()
-
-                    # Skip unhelpful tool status messages
-                    if role == "tool":
-                        skip_phrases = [
-                            "GPT-4o returned",
-                            "Model set context updated",
-                            "From now on, do not say or show ANYTHING",
-                        ]
-                        if any(phrase in content_stripped for phrase in skip_phrases):
-                            logger.debug("  Skipping tool status message")
-                            content_stripped = ""
-
-                    if content_stripped:
-                        timestamp = message.get("create_time")
-
-                        messages.append(
-                            Message(
-                                role=role,
-                                content=content_stripped,
-                                timestamp=timestamp,
-                                metadata=metadata,
-                            )
-                        )
+                msg = _process_message_content(message, role, metadata, user_dir)
+                if msg:
+                    messages.append(msg)
 
         # Visit all children in order
         children = node.get("children", [])
@@ -244,13 +280,14 @@ def format_search_results(metadata: dict[str, Any]) -> str | None:
                 result_lines.append(f"- [{title}]({url})")
                 if snippet:
                     # Clean up snippet (remove excessive whitespace)
-                    clean_snippet = " ".join(snippet.split())[:200]
-                    if len(snippet) > 200:
+                    max_snippet_length = 200
+                    clean_snippet = " ".join(snippet.split())[:max_snippet_length]
+                    if len(snippet) > max_snippet_length:
                         clean_snippet += "..."
                     result_lines.append(f"  > {clean_snippet}")
 
     if len(result_lines) > 1:
-        logger.info(f"  Formatted {len(result_lines) - 1} search results")
+        logger.info("  Formatted %d search results", len(result_lines) - 1)
         return "\n".join(result_lines)
 
     return None
@@ -275,7 +312,7 @@ def format_citations(metadata: dict[str, Any]) -> str | None:
                 citation_lines.append(f"{i}. {url}")
 
     if len(citation_lines) > 1:
-        logger.info(f"  Formatted {len(citation_lines) - 1} citations")
+        logger.info("  Formatted %d citations", len(citation_lines) - 1)
         return "\n".join(citation_lines)
 
     return None
@@ -291,10 +328,11 @@ def format_message_content(content: str) -> str:
             # Try to parse and pretty-print as JSON
             parsed = json.loads(content)
             formatted_json = json.dumps(parsed, indent=2)
-            return f"```json\n{formatted_json}\n```"
         except (json.JSONDecodeError, ValueError):
             # Not valid JSON, return as-is
-            pass
+            return content
+        else:
+            return f"```json\n{formatted_json}\n```"
 
     return content
 
@@ -361,9 +399,7 @@ def format_message(
 
     # Assemble the final message block
     content = "\n\n".join(content_parts)
-    message_block = f"{header}{timestamp_str}\n\n{content}"
-
-    return message_block
+    return f"{header}{timestamp_str}\n\n{content}"
 
 
 def convert_to_markdown(
@@ -380,7 +416,7 @@ def convert_to_markdown(
     is_archived = conversation.get("is_archived", False)
     model_slug = conversation.get("default_model_slug", "unknown")
 
-    logger.info(f"Converting conversation: {title} ({conversation_id})")
+    logger.info("Converting conversation: %s (%s)", title, conversation_id)
 
     # Build header
     markdown = f"# {title}\n\n"
@@ -401,7 +437,7 @@ def convert_to_markdown(
     # Sort messages chronologically by timestamp
     messages = sorted(messages, key=lambda m: m.timestamp if m.timestamp else 0)
 
-    logger.info(f"  Extracted {len(messages)} visible messages")
+    logger.info("  Extracted %d visible messages", len(messages))
 
     # Collect all images from messages
     all_images = []
@@ -448,7 +484,7 @@ def copy_conversation_images(
         filename = image_info.get("filename", "")
 
         if not filename:
-            logger.warning(f"  No filename for asset: {asset}")
+            logger.warning("  No filename for asset: %s", asset)
             continue
 
         # Extract asset ID from sediment:// URL
@@ -462,9 +498,9 @@ def copy_conversation_images(
             dest_file = image_dir / filename
 
             _ = shutil.copy2(source_file, dest_file)
-            logger.info(f"  Copied image: {source_file.name} -> {dest_file.name}")
+            logger.info("  Copied image: %s -> %s", source_file.name, dest_file.name)
         else:
-            logger.warning(f"  Image not found for asset: {asset_id}")
+            logger.warning("  Image not found for asset: %s", asset_id)
 
 
 def has_content(conversation: dict[str, Any]) -> bool:
@@ -480,15 +516,16 @@ def has_content(conversation: dict[str, Any]) -> bool:
 
 
 def main() -> None:
-    with open("raw-logs/chatgpt/conversations.json") as f:
+    conversations_path = Path("raw-logs/chatgpt/conversations.json")
+    with conversations_path.open() as f:
         conversations = json.load(f)
 
-    logger.info(f"Loaded {len(conversations)} conversations")
+    logger.info("Loaded %d conversations", len(conversations))
 
     # Find the user directory containing images
     user_dir = find_chatgpt_user_dir()
     if user_dir:
-        logger.info(f"Found user directory: {user_dir}")
+        logger.info("Found user directory: %s", user_dir)
     else:
         logger.warning("No user directory found - images will not be embedded")
 
@@ -516,10 +553,12 @@ def main() -> None:
             conv_id = conversation.get("conversation_id") or conversation.get(
                 "id", "unknown"
             )
-            logger.info(f"Skipping empty conversation ({conv_id})")
+            logger.info("Skipping empty conversation (%s)", conv_id)
             skipped_count += 1
 
-    logger.info(f"Export complete: {exported_count} exported, {skipped_count} skipped")
+    logger.info(
+        "Export complete: %d exported, %d skipped", exported_count, skipped_count
+    )
 
 
 if __name__ == "__main__":
