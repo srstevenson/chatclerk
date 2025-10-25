@@ -19,6 +19,7 @@ class Language(Enum):
         JSON: JSON syntax highlighting.
         XML: XML syntax highlighting.
         TEXT: Plain text (no syntax highlighting).
+
     """
 
     JSON = "json"
@@ -33,6 +34,7 @@ class ToolOutput:
     Attributes:
         text: The formatted text content.
         language: Optional `Language` enum specifying syntax highlighting.
+
     """
 
     text: str
@@ -45,6 +47,7 @@ class ToolOutput:
         Returns:
             str: `Language` identifier string, or empty string if no language
                 specified.
+
         """
         if self.language is None:
             return ""
@@ -59,6 +62,7 @@ def format_timestamp(timestamp_str: str) -> str:
 
     Returns:
         str: Formatted timestamp string in the format `YYYY-MM-DD HH:MM:SS UTC`.
+
     """
     timestamp = datetime.fromisoformat(timestamp_str)
     return timestamp.strftime("%Y-%m-%d %H:%M:%S UTC")
@@ -73,6 +77,7 @@ def format_json_if_valid(text: str) -> ToolOutput:
     Returns:
         ToolOutput: Formatted text with appropriate language hint for syntax
             highlighting.
+
     """
     text = text.strip()
     if not text:
@@ -100,6 +105,7 @@ def format_citations(citations: list[dict[str, Any]]) -> str | None:
     Returns:
         str | None: Formatted Markdown string of citations, or `None` if no
             valid citations.
+
     """
     if not citations:
         return None
@@ -126,6 +132,7 @@ def format_artifact(item: dict[str, Any]) -> str | None:
     Returns:
         str | None: Formatted Markdown string representing the artifact, or
             `None` if empty.
+
     """
     artifact_input = item["input"]
     artifact_title = artifact_input.get("title", "Untitled Artifact")
@@ -165,6 +172,7 @@ def _format_web_search_input(tool_input: dict[str, Any]) -> str | None:
     Returns:
         str | None: Formatted search query string, or `None` if no query
             present.
+
     """
     if query := tool_input.get("query", ""):
         logger.debug("Web search: %s", query)
@@ -180,6 +188,7 @@ def _format_web_fetch_input(tool_input: dict[str, Any]) -> str | None:
 
     Returns:
         str | None: Formatted URL string, or `None` if no URL present.
+
     """
     if url := tool_input.get("url", ""):
         logger.debug("Web fetch: %s", url)
@@ -195,6 +204,7 @@ def _format_repl_input(tool_input: dict[str, Any]) -> str | None:
 
     Returns:
         str | None: Formatted code block string, or `None` if no code present.
+
     """
     if code := tool_input.get("code", ""):
         logger.debug("REPL: %d chars", len(code))
@@ -214,6 +224,7 @@ def format_tool_input(tool_name: str, tool_input: dict[str, Any]) -> str | None:
     Returns:
         str | None: Formatted input string, or `None` if tool not supported
             or empty.
+
     """
     if not tool_input:  # Can be empty dict
         return None
@@ -243,6 +254,7 @@ def format_display_content(
     Returns:
         str | None: Formatted Markdown string, or `None` if no displayable
             content.
+
     """
     if not display_content:  # Can be null or empty
         return None
@@ -283,6 +295,7 @@ def format_tool_result_text(result_text: str, tool_name: str) -> str | None:
     Returns:
         str | None: Formatted Markdown code block, or `None` if empty or just
             `"OK"`.
+
     """
     if not result_text or result_text == "OK":
         return None
@@ -302,6 +315,7 @@ def _process_text_content(item: dict[str, Any], text_parts: list[str]) -> None:
     Args:
         item: Dictionary containing text content and citations.
         text_parts: List to append formatted text parts to.
+
     """
     if text := item["text"].strip():
         text_parts.append(text)
@@ -319,6 +333,7 @@ def _process_tool_use(item: dict[str, Any], text_parts: list[str]) -> str:
 
     Returns:
         str: The name of the tool that was used.
+
     """
     tool_name = item["name"]
 
@@ -340,6 +355,7 @@ def _process_tool_result(item: dict[str, Any], text_parts: list[str]) -> None:
     Args:
         item: Dictionary containing tool result data.
         text_parts: List to append formatted result parts to.
+
     """
     tool_name = item["name"]
 
@@ -368,6 +384,7 @@ def extract_text_from_content(content: list[dict[str, Any]]) -> str:
 
     Returns:
         str: Formatted Markdown string combining all content items.
+
     """
     if not content:
         return ""
@@ -403,6 +420,7 @@ def format_file_item(file_item: dict[str, Any]) -> str:
 
     Returns:
         str: Formatted Markdown list item with file details.
+
     """
     file_name = file_item.get("file_name", "unknown")
     file_size = file_item.get("file_size", "")
@@ -425,6 +443,7 @@ def format_attachments(attachments: list[dict[str, Any]]) -> str | None:
 
     Returns:
         str | None: Formatted Markdown list of attachments, or `None` if empty.
+
     """
     if not attachments:
         return None
@@ -444,6 +463,7 @@ def format_files(files: list[dict[str, Any]]) -> str | None:
 
     Returns:
         str | None: Formatted Markdown list of files, or `None` if empty.
+
     """
     if not files:
         return None
@@ -464,6 +484,7 @@ def format_message(message: dict[str, Any]) -> str:
 
     Returns:
         str: The formatted message as a Markdown string.
+
     """
     sender = message["sender"]
     created_at = message["created_at"]
@@ -498,6 +519,7 @@ def convert_to_markdown(conversation: dict[str, Any]) -> str:
 
     Returns:
         str: The formatted conversation as a Markdown string.
+
     """
     uuid = conversation["uuid"]
     name = conversation["name"]
@@ -542,6 +564,7 @@ def has_content(conversation: dict[str, Any]) -> bool:
     Returns:
         bool: `True` if the conversation has a name, messages, or attachments,
             otherwise `False`.
+
     """
     if conversation["name"].strip():
         return True
@@ -569,6 +592,7 @@ class Args(argparse.Namespace):
         input_dir: Directory containing the Claude export data.
         output_dir: Directory where Markdown files will be written.
         verbose: Enable verbose logging.
+
     """
 
     input_dir: Path = field(init=False)
@@ -581,6 +605,7 @@ def parse_arguments() -> Args:
 
     Returns:
         Args: Parsed command-line arguments.
+
     """
     parser = argparse.ArgumentParser(
         description="convert data export from claude.ai to Markdown"

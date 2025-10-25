@@ -28,6 +28,7 @@ class ArtifactInfo:
         content_type: MIME type of the artifact content.
         content: The actual artifact content.
         filename: Filename for the exported artifact file.
+
     """
 
     artifact_id: str
@@ -46,6 +47,7 @@ class FileAttachmentInfo:
         attachment_id: The attachment identifier (matches asset directory).
         filename: Filename for the exported attachment.
         exists: Whether the file exists in the asset server directory.
+
     """
 
     attachment_id: str
@@ -61,6 +63,7 @@ class MessageResult:
         formatted_text: The formatted Markdown text.
         artifacts: List of artifacts extracted from the message.
         attachments: List of file attachments in the message.
+
     """
 
     formatted_text: str
@@ -76,6 +79,7 @@ def format_mongodb_timestamp(timestamp_obj: dict[str, Any]) -> str:
 
     Returns:
         str: Formatted timestamp string in the format `YYYY-MM-DD HH:MM:SS UTC`.
+
     """
     timestamp_ms = int(timestamp_obj["$date"]["$numberLong"])
     timestamp_s = timestamp_ms / 1000.0
@@ -92,6 +96,7 @@ def extract_artifacts_from_message(message: str) -> tuple[str, list[ArtifactInfo
     Returns:
         tuple[str, list[ArtifactInfo]]: Cleaned message text and list of
             extracted artifacts.
+
     """
     artifacts: list[ArtifactInfo] = []
 
@@ -154,6 +159,7 @@ def detect_file_type(file_path: Path) -> str:  # noqa: PLR0911, C901
 
     Returns:
         str: File extension based on detected type.
+
     """
     if not file_path.exists():
         return ".bin"
@@ -202,6 +208,7 @@ def extract_file_attachments(
 
     Returns:
         list[FileAttachmentInfo]: List of file attachment information.
+
     """
     attachments: list[FileAttachmentInfo] = []
     file_attachments = response_data.get("file_attachments", [])
@@ -236,6 +243,7 @@ def format_iso_timestamp(timestamp_str: str) -> str:
 
     Returns:
         str: Formatted timestamp string in the format `YYYY-MM-DD HH:MM:SS UTC`.
+
     """
     dt = datetime.fromisoformat(timestamp_str)
     return dt.strftime("%Y-%m-%d %H:%M:%S UTC")
@@ -253,6 +261,7 @@ def format_message(  # noqa: PLR0912, C901
 
     Returns:
         MessageResult: The formatted message and associated assets.
+
     """
     response_data = response["response"]
     sender = response_data["sender"]
@@ -342,6 +351,7 @@ def convert_to_markdown(
     Returns:
         tuple[str, list[ArtifactInfo], list[FileAttachmentInfo]]: The formatted
             conversation as Markdown, list of artifacts, and list of attachments.
+
     """
     conv_metadata = conversation["conversation"]
     conv_id = conv_metadata.get("id", "unknown")
@@ -400,6 +410,7 @@ def copy_conversation_assets(
         attachments: List of attachments to copy.
         output_dir: Base output directory for processed conversations.
         user_dir: Path to the asset server directory containing source files.
+
     """
     if not artifacts and not attachments:
         return
@@ -433,6 +444,7 @@ def has_content(conversation: dict[str, Any]) -> bool:
     Returns:
         bool: `True` if the conversation has a title or messages, otherwise
             `False`.
+
     """
     conv_metadata = conversation["conversation"]
     if (title := conv_metadata.get("title")) and title.strip():
@@ -454,6 +466,7 @@ class Args(argparse.Namespace):
         input_dir: Directory containing the Grok export data.
         output_dir: Directory where Markdown files will be written.
         verbose: Enable verbose logging.
+
     """
 
     input_dir: Path = field(init=False)
@@ -466,6 +479,7 @@ def parse_arguments() -> Args:
 
     Returns:
         Args: Parsed command-line arguments.
+
     """
     parser = argparse.ArgumentParser(
         description="convert data export from grok.com to Markdown"
