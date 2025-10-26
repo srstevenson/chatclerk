@@ -6,9 +6,10 @@ import logging
 import re
 import shutil
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Final
+
+from chatclerk.datetime import iso_timestamp_to_str, mongodb_timestamp_to_str
 
 logger: Final = logging.getLogger(__name__)
 
@@ -69,22 +70,6 @@ class MessageResult:
     formatted_text: str
     artifacts: list[ArtifactInfo] = field(default_factory=list)
     attachments: list[FileAttachmentInfo] = field(default_factory=list)
-
-
-def _format_mongodb_timestamp(timestamp_obj: dict[str, Any]) -> str:
-    """Convert a MongoDB timestamp to a human-readable string.
-
-    Args:
-        timestamp_obj: MongoDB timestamp dictionary with $date and $numberLong.
-
-    Returns:
-        str: Formatted timestamp string in the format `YYYY-MM-DD HH:MM:SS UTC`.
-
-    """
-    timestamp_ms = int(timestamp_obj["$date"]["$numberLong"])
-    timestamp_s = timestamp_ms / 1000.0
-    dt = datetime.fromtimestamp(timestamp_s, tz=UTC)
-    return dt.strftime("%Y-%m-%d %H:%M:%S UTC")
 
 
 def _extract_artifacts_from_message(message: str) -> tuple[str, list[ArtifactInfo]]:
@@ -235,20 +220,6 @@ def _extract_file_attachments(
     return attachments
 
 
-def _format_iso_timestamp(timestamp_str: str) -> str:
-    """Convert an ISO 8601 timestamp to a human-readable string.
-
-    Args:
-        timestamp_str: ISO 8601 formatted timestamp string.
-
-    Returns:
-        str: Formatted timestamp string in the format `YYYY-MM-DD HH:MM:SS UTC`.
-
-    """
-    dt = datetime.fromisoformat(timestamp_str)
-    return dt.strftime("%Y-%m-%d %H:%M:%S UTC")
-
-
 def _format_message(  # noqa: PLR0912, C901
     response: dict[str, Any], user_dir: Path, conversation_id: str = ""
 ) -> MessageResult:
@@ -288,7 +259,7 @@ def _format_message(  # noqa: PLR0912, C901
 
     header_parts: list[str] = [header]
 
-    if create_time and (timestamp := _format_mongodb_timestamp(create_time)):
+    if create_time and (timestamp := mongodb_timestamp_to_str(create_time)):
         timestamp_line = f"*{timestamp}*"
         if sender_lower == "assistant" and model and model != "unknown":
             timestamp_line += f" | Model: {model}"
@@ -369,9 +340,9 @@ def _convert_to_markdown(
 
     header_parts = [f"# {title}\n", f"- **Conversation ID:** {conv_id}"]
 
-    if create_time and (created := _format_iso_timestamp(create_time)):
+    if create_time and (created := iso_timestamp_to_str(create_time)):
         header_parts.append(f"- **Created:** {created}")
-    if modify_time and (modified := _format_iso_timestamp(modify_time)):
+    if modify_time and (modified := iso_timestamp_to_str(modify_time)):
         header_parts.append(f"- **Updated:** {modified}")
     if system_prompt:
         header_parts.append(f"- **System Prompt:** {system_prompt}")

@@ -4,10 +4,11 @@ import argparse
 import json
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime
 from enum import Enum
 from pathlib import Path
 from typing import Any, Final
+
+from chatclerk.datetime import iso_timestamp_to_str
 
 logger: Final = logging.getLogger(__name__)
 
@@ -52,20 +53,6 @@ class ToolOutput:
         if self.language is None:
             return ""
         return self.language.value
-
-
-def _format_timestamp(timestamp_str: str) -> str:
-    """Convert an ISO 8601 timestamp to a human-readable string.
-
-    Args:
-        timestamp_str: ISO 8601 formatted timestamp string.
-
-    Returns:
-        str: Formatted timestamp string in the format `YYYY-MM-DD HH:MM:SS UTC`.
-
-    """
-    timestamp = datetime.fromisoformat(timestamp_str)
-    return timestamp.strftime("%Y-%m-%d %H:%M:%S UTC")
 
 
 def _format_json_if_valid(text: str) -> ToolOutput:
@@ -494,7 +481,7 @@ def _format_message(message: dict[str, Any]) -> str:
     logger.debug("Message: %s (%d items)", sender, len(message["content"]))
 
     header = f"## {sender.title()}"
-    timestamp = _format_timestamp(created_at)
+    timestamp = iso_timestamp_to_str(created_at)
 
     content = _extract_text_from_content(message["content"])
     if not content:
@@ -525,8 +512,8 @@ def _convert_to_markdown(conversation: dict[str, Any]) -> str:
     """
     uuid = conversation["uuid"]
     name = conversation["name"]
-    created_at = _format_timestamp(conversation["created_at"])
-    updated_at = _format_timestamp(conversation["updated_at"])
+    created_at = iso_timestamp_to_str(conversation["created_at"])
+    updated_at = iso_timestamp_to_str(conversation["updated_at"])
 
     logger.info(
         "Converting conversation: %s (%s, %d messages)",

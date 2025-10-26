@@ -5,9 +5,10 @@ import json
 import logging
 import shutil
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Final
+
+from chatclerk.datetime import unix_timestamp_to_str
 
 logger: Final = logging.getLogger(__name__)
 
@@ -26,20 +27,6 @@ def _get_user_dir(input_dir: Path) -> Path:
     with user_json_path.open() as f:
         user_data = json.load(f)
     return input_dir.joinpath(user_data["id"])
-
-
-def _format_timestamp(timestamp: float) -> str:
-    """Convert a Unix timestamp to a human-readable string.
-
-    Args:
-        timestamp: Unix timestamp as a float.
-
-    Returns:
-        str: Formatted timestamp string in the format `YYYY-MM-DD HH:MM:SS UTC`.
-
-    """
-    dt = datetime.fromtimestamp(timestamp, tz=UTC)
-    return dt.strftime("%Y-%m-%d %H:%M:%S UTC")
 
 
 @dataclass(frozen=True)
@@ -422,7 +409,7 @@ def _format_message(
 
     timestamp_str = ""
     if message.timestamp:
-        timestamp_str = f"\n\n*{_format_timestamp(message.timestamp)}*"
+        timestamp_str = f"\n\n*{unix_timestamp_to_str(message.timestamp)}*"
 
     content_parts: list[str] = []
 
@@ -488,9 +475,9 @@ def _convert_to_markdown(
     header_parts = [f"# {title}\n", f"- **Conversation ID:** {conversation_id}"]
 
     if create_time:
-        header_parts.append(f"- **Created:** {_format_timestamp(create_time)}")
+        header_parts.append(f"- **Created:** {unix_timestamp_to_str(create_time)}")
     if update_time:
-        header_parts.append(f"- **Updated:** {_format_timestamp(update_time)}")
+        header_parts.append(f"- **Updated:** {unix_timestamp_to_str(update_time)}")
 
     header_parts.append(f"- **Archived:** {'Yes' if is_archived else 'No'}")
     header_parts.append(f"- **Model:** {model_slug}\n")
