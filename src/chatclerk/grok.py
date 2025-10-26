@@ -71,7 +71,7 @@ class MessageResult:
     attachments: list[FileAttachmentInfo] = field(default_factory=list)
 
 
-def format_mongodb_timestamp(timestamp_obj: dict[str, Any]) -> str:
+def _format_mongodb_timestamp(timestamp_obj: dict[str, Any]) -> str:
     """Convert a MongoDB timestamp to a human-readable string.
 
     Args:
@@ -87,7 +87,7 @@ def format_mongodb_timestamp(timestamp_obj: dict[str, Any]) -> str:
     return dt.strftime("%Y-%m-%d %H:%M:%S UTC")
 
 
-def extract_artifacts_from_message(message: str) -> tuple[str, list[ArtifactInfo]]:
+def _extract_artifacts_from_message(message: str) -> tuple[str, list[ArtifactInfo]]:
     """Extract xaiArtifact tags from message text and return cleaned message.
 
     Args:
@@ -110,7 +110,7 @@ def extract_artifacts_from_message(message: str) -> tuple[str, list[ArtifactInfo
         re.DOTALL,
     )
 
-    def replace_artifact(match: re.Match[str]) -> str:
+    def _replace_artifact(match: re.Match[str]) -> str:
         artifact_id = match.group(1)
         artifact_version_id = match.group(2)
         title = match.group(3)
@@ -147,11 +147,11 @@ def extract_artifacts_from_message(message: str) -> tuple[str, list[ArtifactInfo
 
         return f"*[Artifact: {title}]*"
 
-    cleaned_message = artifact_pattern.sub(replace_artifact, message)
+    cleaned_message = artifact_pattern.sub(_replace_artifact, message)
     return cleaned_message, artifacts
 
 
-def detect_file_type(file_path: Path) -> str:  # noqa: PLR0911, C901
+def _detect_file_type(file_path: Path) -> str:  # noqa: PLR0911, C901
     """Detect file type from magic bytes.
 
     Args:
@@ -197,7 +197,7 @@ def detect_file_type(file_path: Path) -> str:  # noqa: PLR0911, C901
         return ".bin"
 
 
-def extract_file_attachments(
+def _extract_file_attachments(
     response_data: dict[str, Any], user_dir: Path
 ) -> list[FileAttachmentInfo]:
     """Extract file attachment information from response data.
@@ -219,7 +219,7 @@ def extract_file_attachments(
         exists = asset_file.exists()
 
         if exists:
-            ext = detect_file_type(asset_file)
+            ext = _detect_file_type(asset_file)
             filename = f"{attachment_id}{ext}"
             logger.debug("Found attachment: %s (type: %s)", attachment_id, ext)
         else:
@@ -235,7 +235,7 @@ def extract_file_attachments(
     return attachments
 
 
-def format_iso_timestamp(timestamp_str: str) -> str:
+def _format_iso_timestamp(timestamp_str: str) -> str:
     """Convert an ISO 8601 timestamp to a human-readable string.
 
     Args:
@@ -249,7 +249,7 @@ def format_iso_timestamp(timestamp_str: str) -> str:
     return dt.strftime("%Y-%m-%d %H:%M:%S UTC")
 
 
-def format_message(  # noqa: PLR0912, C901
+def _format_message(  # noqa: PLR0912, C901
     response: dict[str, Any], user_dir: Path, conversation_id: str = ""
 ) -> MessageResult:
     """Format a single message as Markdown.
@@ -275,9 +275,9 @@ def format_message(  # noqa: PLR0912, C901
     attachments: list[FileAttachmentInfo] = []
 
     if message:
-        message, artifacts = extract_artifacts_from_message(message)
+        message, artifacts = _extract_artifacts_from_message(message)
 
-    attachments = extract_file_attachments(response_data, user_dir)
+    attachments = _extract_file_attachments(response_data, user_dir)
 
     if sender_lower == "human":
         header = "## User"
@@ -288,7 +288,7 @@ def format_message(  # noqa: PLR0912, C901
 
     header_parts: list[str] = [header]
 
-    if create_time and (timestamp := format_mongodb_timestamp(create_time)):
+    if create_time and (timestamp := _format_mongodb_timestamp(create_time)):
         timestamp_line = f"*{timestamp}*"
         if sender_lower == "assistant" and model and model != "unknown":
             timestamp_line += f" | Model: {model}"
@@ -339,7 +339,7 @@ def format_message(  # noqa: PLR0912, C901
     )
 
 
-def convert_to_markdown(
+def _convert_to_markdown(
     conversation: dict[str, Any], user_dir: Path
 ) -> tuple[str, list[ArtifactInfo], list[FileAttachmentInfo]]:
     """Convert a Grok conversation to Markdown format.
@@ -369,9 +369,9 @@ def convert_to_markdown(
 
     header_parts = [f"# {title}\n", f"- **Conversation ID:** {conv_id}"]
 
-    if create_time and (created := format_iso_timestamp(create_time)):
+    if create_time and (created := _format_iso_timestamp(create_time)):
         header_parts.append(f"- **Created:** {created}")
-    if modify_time and (modified := format_iso_timestamp(modify_time)):
+    if modify_time and (modified := _format_iso_timestamp(modify_time)):
         header_parts.append(f"- **Updated:** {modified}")
     if system_prompt:
         header_parts.append(f"- **System Prompt:** {system_prompt}")
@@ -384,7 +384,7 @@ def convert_to_markdown(
     all_attachments: list[FileAttachmentInfo] = []
 
     for response in responses:
-        result = format_message(response, user_dir, conv_id)
+        result = _format_message(response, user_dir, conv_id)
         message_blocks.append(result.formatted_text)
         all_artifacts.extend(result.artifacts)
         all_attachments.extend(result.attachments)
@@ -395,7 +395,7 @@ def convert_to_markdown(
     return f"{header}\n{messages_section}", all_artifacts, all_attachments
 
 
-def copy_conversation_assets(
+def _copy_conversation_assets(
     conversation_id: str,
     artifacts: list[ArtifactInfo],
     attachments: list[FileAttachmentInfo],
@@ -435,7 +435,7 @@ def copy_conversation_assets(
         logger.debug("Copied attachment: %s -> %s", source_file.name, dest_file.name)
 
 
-def has_content(conversation: dict[str, Any]) -> bool:
+def _has_content(conversation: dict[str, Any]) -> bool:
     """Check whether a conversation contains meaningful content.
 
     Args:
@@ -474,7 +474,7 @@ class Args(argparse.Namespace):
     verbose: bool = False
 
 
-def parse_arguments() -> Args:
+def _parse_arguments() -> Args:
     """Parse command-line arguments.
 
     Returns:
@@ -511,7 +511,7 @@ def main() -> None:
     conversation with content to Markdown, and writes the results to the output
     directory along with any associated artifacts and attachments.
     """
-    args = parse_arguments()
+    args = _parse_arguments()
 
     log_level = logging.DEBUG if args.verbose else logging.INFO
     logging.basicConfig(level=log_level, format="[%(levelname)-8s] %(message)s")
@@ -537,17 +537,19 @@ def main() -> None:
     for conversation in conversations:
         conv_id = conversation["conversation"].get("id", "unknown")
 
-        if not has_content(conversation):
+        if not _has_content(conversation):
             logger.debug("Skipping empty conversation (%s)", conv_id)
             skipped_count += 1
             continue
 
-        md_content, artifacts, attachments = convert_to_markdown(conversation, user_dir)
+        md_content, artifacts, attachments = _convert_to_markdown(
+            conversation, user_dir
+        )
         output_file = args.output_dir.joinpath(f"{conv_id}.md")
         output_file.write_text(md_content)
 
         if artifacts or attachments:
-            copy_conversation_assets(
+            _copy_conversation_assets(
                 conv_id, artifacts, attachments, args.output_dir, user_dir
             )
 

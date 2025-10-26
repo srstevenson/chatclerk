@@ -12,7 +12,7 @@ from typing import Any, Final
 logger: Final = logging.getLogger(__name__)
 
 
-def find_chatgpt_user_dir(input_dir: Path) -> Path:
+def _get_user_dir(input_dir: Path) -> Path:
     """Determine the ChatGPT user directory path from `user.json`.
 
     Args:
@@ -28,7 +28,7 @@ def find_chatgpt_user_dir(input_dir: Path) -> Path:
     return input_dir.joinpath(user_data["id"])
 
 
-def format_timestamp(timestamp: float) -> str:
+def _format_timestamp(timestamp: float) -> str:
     """Convert a Unix timestamp to a human-readable string.
 
     Args:
@@ -257,7 +257,7 @@ def _process_message_content(
     return _process_regular_content(content_obj, role, metadata, timestamp)
 
 
-def traverse_message_tree(
+def _traverse_message_tree(
     mapping: dict[str, Any], user_dir: Path, start_id: str = "client-created-root"
 ) -> list[Message]:
     """Traverse the conversation message tree to extract all messages.
@@ -302,7 +302,7 @@ def traverse_message_tree(
     return messages
 
 
-def format_search_results(metadata: dict[str, Any]) -> str | None:
+def _format_search_results(metadata: dict[str, Any]) -> str | None:
     """Format web search results as a Markdown list.
 
     Args:
@@ -342,7 +342,7 @@ def format_search_results(metadata: dict[str, Any]) -> str | None:
     return None
 
 
-def format_citations(metadata: dict[str, Any]) -> str | None:
+def _format_citations(metadata: dict[str, Any]) -> str | None:
     """Format citations as a numbered Markdown list.
 
     Args:
@@ -377,7 +377,7 @@ def format_citations(metadata: dict[str, Any]) -> str | None:
     return None
 
 
-def format_message_content(content: str) -> str:
+def _format_message_content(content: str) -> str:
     """Format message content, applying syntax highlighting to JSON.
 
     Args:
@@ -401,7 +401,7 @@ def format_message_content(content: str) -> str:
     return content
 
 
-def format_message(
+def _format_message(
     message: Message, conversation_id: str = "", image_index_offset: int = 0
 ) -> str:
     """Format a single message as Markdown.
@@ -422,12 +422,12 @@ def format_message(
 
     timestamp_str = ""
     if message.timestamp:
-        timestamp_str = f"\n\n*{format_timestamp(message.timestamp)}*"
+        timestamp_str = f"\n\n*{_format_timestamp(message.timestamp)}*"
 
     content_parts: list[str] = []
 
     if message.content:
-        formatted_content = format_message_content(message.content)
+        formatted_content = _format_message_content(message.content)
         content_parts.append(formatted_content)
 
     if message.images:
@@ -451,17 +451,17 @@ def format_message(
             )
             content_parts.append(image_md)
 
-    if search_results := format_search_results(message.metadata):
+    if search_results := _format_search_results(message.metadata):
         content_parts.append(search_results)
 
-    if citations := format_citations(message.metadata):
+    if citations := _format_citations(message.metadata):
         content_parts.append(citations)
 
     content = "\n\n".join(content_parts)
     return f"{header}{timestamp_str}\n\n{content}"
 
 
-def convert_to_markdown(
+def _convert_to_markdown(
     conversation: dict[str, Any], user_dir: Path
 ) -> tuple[str, list[ImageInfo]]:
     """Convert a ChatGPT conversation to Markdown format.
@@ -488,15 +488,15 @@ def convert_to_markdown(
     header_parts = [f"# {title}\n", f"- **Conversation ID:** {conversation_id}"]
 
     if create_time:
-        header_parts.append(f"- **Created:** {format_timestamp(create_time)}")
+        header_parts.append(f"- **Created:** {_format_timestamp(create_time)}")
     if update_time:
-        header_parts.append(f"- **Updated:** {format_timestamp(update_time)}")
+        header_parts.append(f"- **Updated:** {_format_timestamp(update_time)}")
 
     header_parts.append(f"- **Archived:** {'Yes' if is_archived else 'No'}")
     header_parts.append(f"- **Model:** {model_slug}\n")
 
     mapping = conversation.get("mapping", {})
-    messages = traverse_message_tree(mapping, user_dir)
+    messages = _traverse_message_tree(mapping, user_dir)
 
     messages = sorted(messages, key=lambda m: m.timestamp if m.timestamp else 0)
 
@@ -510,7 +510,7 @@ def convert_to_markdown(
     message_blocks: list[str] = []
     image_counter = 0
     for message in messages:
-        message_block = format_message(message, conversation_id, image_counter)
+        message_block = _format_message(message, conversation_id, image_counter)
         if message_block:
             message_blocks.append(message_block)
         if message.images:
@@ -523,7 +523,7 @@ def convert_to_markdown(
     return f"{header}\n{messages_section}", all_images
 
 
-def copy_conversation_images(
+def _copy_conversation_images(
     conversation_id: str, images: list[ImageInfo], output_dir: Path, user_dir: Path
 ) -> None:
     """Copy conversation images to a subdirectory in the output location.
@@ -563,7 +563,7 @@ def copy_conversation_images(
         logger.debug("Copied image: %s -> %s", source_file.name, dest_file.name)
 
 
-def has_content(conversation: dict[str, Any], user_dir: Path) -> bool:
+def _has_content(conversation: dict[str, Any], user_dir: Path) -> bool:
     """Check whether a conversation contains meaningful content.
 
     Args:
@@ -577,7 +577,7 @@ def has_content(conversation: dict[str, Any], user_dir: Path) -> bool:
     """
     if conversation.get("title", "").strip():
         mapping = conversation.get("mapping", {})
-        messages = traverse_message_tree(mapping, user_dir)
+        messages = _traverse_message_tree(mapping, user_dir)
         return len(messages) > 0
 
     return False
@@ -599,7 +599,7 @@ class Args(argparse.Namespace):
     verbose: bool = False
 
 
-def parse_arguments() -> Args:
+def _parse_arguments() -> Args:
     """Parse command-line arguments.
 
     Returns:
@@ -636,7 +636,7 @@ def main() -> None:
     conversation with content to Markdown, and writes the results to the output
     directory along with any associated images.
     """
-    args = parse_arguments()
+    args = _parse_arguments()
 
     log_level = logging.DEBUG if args.verbose else logging.INFO
     logging.basicConfig(level=log_level, format="[%(levelname)-8s] %(message)s")
@@ -647,7 +647,7 @@ def main() -> None:
 
     logger.info("Loaded %d conversations", len(conversations))
 
-    user_dir = find_chatgpt_user_dir(args.input_dir)
+    user_dir = _get_user_dir(args.input_dir)
     logger.info("Found user directory: %s", user_dir)
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
@@ -656,7 +656,7 @@ def main() -> None:
     skipped_count = 0
 
     for conversation in conversations:
-        if not has_content(conversation, user_dir):
+        if not _has_content(conversation, user_dir):
             conv_id = conversation.get("conversation_id") or conversation.get(
                 "id", "unknown"
             )
@@ -667,12 +667,14 @@ def main() -> None:
         conversation_id = conversation.get("conversation_id") or conversation.get(
             "id", "unknown"
         )
-        md_content, images = convert_to_markdown(conversation, user_dir)
+        md_content, images = _convert_to_markdown(conversation, user_dir)
         output_file = args.output_dir.joinpath(f"{conversation_id}.md")
         output_file.write_text(md_content)
 
         if images:
-            copy_conversation_images(conversation_id, images, args.output_dir, user_dir)
+            _copy_conversation_images(
+                conversation_id, images, args.output_dir, user_dir
+            )
 
         exported_count += 1
 

@@ -54,7 +54,7 @@ class ToolOutput:
         return self.language.value
 
 
-def format_timestamp(timestamp_str: str) -> str:
+def _format_timestamp(timestamp_str: str) -> str:
     """Convert an ISO 8601 timestamp to a human-readable string.
 
     Args:
@@ -68,7 +68,7 @@ def format_timestamp(timestamp_str: str) -> str:
     return timestamp.strftime("%Y-%m-%d %H:%M:%S UTC")
 
 
-def format_json_if_valid(text: str) -> ToolOutput:
+def _format_json_if_valid(text: str) -> ToolOutput:
     """Attempt to parse and format text as JSON or XML with syntax highlighting.
 
     Args:
@@ -96,7 +96,7 @@ def format_json_if_valid(text: str) -> ToolOutput:
         return ToolOutput(text=text, language=Language.TEXT)
 
 
-def format_citations(citations: list[dict[str, Any]]) -> str | None:
+def _format_citations(citations: list[dict[str, Any]]) -> str | None:
     """Format citations as a numbered Markdown list.
 
     Args:
@@ -123,7 +123,7 @@ def format_citations(citations: list[dict[str, Any]]) -> str | None:
     return None
 
 
-def format_artifact(item: dict[str, Any]) -> str | None:
+def _format_artifact(item: dict[str, Any]) -> str | None:
     """Format an artifact tool use as Markdown.
 
     Args:
@@ -212,7 +212,7 @@ def _format_repl_input(tool_input: dict[str, Any]) -> str | None:
     return None
 
 
-def format_tool_input(tool_name: str, tool_input: dict[str, Any]) -> str | None:
+def _format_tool_input(tool_name: str, tool_input: dict[str, Any]) -> str | None:
     """Format tool input parameters for display.
 
     Only formats inputs for selected tools that provide useful context.
@@ -242,7 +242,7 @@ def format_tool_input(tool_name: str, tool_input: dict[str, Any]) -> str | None:
     return None
 
 
-def format_display_content(
+def _format_display_content(
     display_content: dict[str, Any], tool_name: str
 ) -> str | None:
     """Format rich display content from tool results as Markdown.
@@ -285,7 +285,7 @@ def format_display_content(
     return None
 
 
-def format_tool_result_text(result_text: str, tool_name: str) -> str | None:
+def _format_tool_result_text(result_text: str, tool_name: str) -> str | None:
     """Format text content from a tool result as a code block.
 
     Args:
@@ -300,7 +300,7 @@ def format_tool_result_text(result_text: str, tool_name: str) -> str | None:
     if not result_text or result_text == "OK":
         return None
 
-    formatted = format_json_if_valid(result_text)
+    formatted = _format_json_if_valid(result_text)
     clean_text = formatted.text.rstrip()
     lang = formatted.code_block_language
 
@@ -320,7 +320,7 @@ def _process_text_content(item: dict[str, Any], text_parts: list[str]) -> None:
     if text := item["text"].strip():
         text_parts.append(text)
 
-    if citations_text := format_citations(item["citations"]):
+    if citations_text := _format_citations(item["citations"]):
         text_parts.append(citations_text)
 
 
@@ -338,11 +338,11 @@ def _process_tool_use(item: dict[str, Any], text_parts: list[str]) -> str:
     tool_name = item["name"]
 
     if tool_name == "artifacts":
-        if artifact_text := format_artifact(item):
+        if artifact_text := _format_artifact(item):
             text_parts.append(artifact_text)
 
     elif tool_name in ["web_search", "web_fetch", "repl"] and (
-        tool_input_text := format_tool_input(tool_name, item["input"])
+        tool_input_text := _format_tool_input(tool_name, item["input"])
     ):
         text_parts.append(tool_input_text)
 
@@ -359,7 +359,7 @@ def _process_tool_result(item: dict[str, Any], text_parts: list[str]) -> None:
     """
     tool_name = item["name"]
 
-    if display_text := format_display_content(item["display_content"], tool_name):
+    if display_text := _format_display_content(item["display_content"], tool_name):
         text_parts.append(display_text)
 
     result_content = item["content"]
@@ -369,11 +369,13 @@ def _process_tool_result(item: dict[str, Any], text_parts: list[str]) -> None:
             for result_item in result_content  # pyright: ignore[reportUnknownVariableType]
             if isinstance(result_item, dict)
             and result_item.get("type") == "text"  # pyright: ignore[reportUnknownMemberType]
-            and (result_text := format_tool_result_text(result_item["text"], tool_name))  # pyright: ignore[reportUnknownArgumentType]
+            and (
+                result_text := _format_tool_result_text(result_item["text"], tool_name)  # pyright: ignore[reportUnknownArgumentType]
+            )
         )
 
 
-def extract_text_from_content(content: list[dict[str, Any]]) -> str:
+def _extract_text_from_content(content: list[dict[str, Any]]) -> str:
     """Extract and format text content from a message's content array.
 
     Processes text, tool use, and tool result items into a unified Markdown
@@ -412,7 +414,7 @@ def extract_text_from_content(content: list[dict[str, Any]]) -> str:
     return result
 
 
-def format_file_item(file_item: dict[str, Any]) -> str:
+def _format_file_item(file_item: dict[str, Any]) -> str:
     """Format a single file or attachment item as Markdown.
 
     Args:
@@ -435,7 +437,7 @@ def format_file_item(file_item: dict[str, Any]) -> str:
     return info
 
 
-def format_attachments(attachments: list[dict[str, Any]]) -> str | None:
+def _format_attachments(attachments: list[dict[str, Any]]) -> str | None:
     """Format attachments list as Markdown.
 
     Args:
@@ -448,14 +450,14 @@ def format_attachments(attachments: list[dict[str, Any]]) -> str | None:
     if not attachments:
         return None
 
-    attachment_info = [format_file_item(attachment) for attachment in attachments]
+    attachment_info = [_format_file_item(attachment) for attachment in attachments]
 
     if attachment_info:
         return f"*[Attachments: {len(attachments)}]*\n" + "\n".join(attachment_info)
     return None
 
 
-def format_files(files: list[dict[str, Any]]) -> str | None:
+def _format_files(files: list[dict[str, Any]]) -> str | None:
     """Format files list as Markdown.
 
     Args:
@@ -468,7 +470,7 @@ def format_files(files: list[dict[str, Any]]) -> str | None:
     if not files:
         return None
 
-    file_info = [format_file_item(file) for file in files]
+    file_info = [_format_file_item(file) for file in files]
 
     if file_info:
         return f"*[Files: {len(files)}]*\n" + "\n".join(file_info)
@@ -476,7 +478,7 @@ def format_files(files: list[dict[str, Any]]) -> str | None:
     return None
 
 
-def format_message(message: dict[str, Any]) -> str:
+def _format_message(message: dict[str, Any]) -> str:
     """Format a single chat message as Markdown.
 
     Args:
@@ -492,9 +494,9 @@ def format_message(message: dict[str, Any]) -> str:
     logger.debug("Message: %s (%d items)", sender, len(message["content"]))
 
     header = f"## {sender.title()}"
-    timestamp = format_timestamp(created_at)
+    timestamp = _format_timestamp(created_at)
 
-    content = extract_text_from_content(message["content"])
+    content = _extract_text_from_content(message["content"])
     if not content:
         content = message["text"].strip()
 
@@ -502,16 +504,16 @@ def format_message(message: dict[str, Any]) -> str:
     if content:
         content_parts.append(content)
 
-    if attachments_text := format_attachments(message["attachments"]):
+    if attachments_text := _format_attachments(message["attachments"]):
         content_parts.append(attachments_text)
 
-    if files_text := format_files(message["files"]):
+    if files_text := _format_files(message["files"]):
         content_parts.append(files_text)
 
     return f"{header}\n\n*{timestamp}*\n\n" + "\n\n".join(content_parts)
 
 
-def convert_to_markdown(conversation: dict[str, Any]) -> str:
+def _convert_to_markdown(conversation: dict[str, Any]) -> str:
     """Convert a Claude conversation to Markdown format.
 
     Args:
@@ -523,8 +525,8 @@ def convert_to_markdown(conversation: dict[str, Any]) -> str:
     """
     uuid = conversation["uuid"]
     name = conversation["name"]
-    created_at = format_timestamp(conversation["created_at"])
-    updated_at = format_timestamp(conversation["updated_at"])
+    created_at = _format_timestamp(conversation["created_at"])
+    updated_at = _format_timestamp(conversation["updated_at"])
 
     logger.info(
         "Converting conversation: %s (%s, %d messages)",
@@ -545,7 +547,7 @@ def convert_to_markdown(conversation: dict[str, Any]) -> str:
     message_blocks = [
         message_block
         for message in messages
-        if (message_block := format_message(message))
+        if (message_block := _format_message(message))
     ]
 
     # Combine header and messages
@@ -555,7 +557,7 @@ def convert_to_markdown(conversation: dict[str, Any]) -> str:
     return f"{header}\n{messages_section}"
 
 
-def has_content(conversation: dict[str, Any]) -> bool:
+def _has_content(conversation: dict[str, Any]) -> bool:
     """Check whether a conversation contains meaningful content.
 
     Args:
@@ -600,7 +602,7 @@ class Args(argparse.Namespace):
     verbose: bool = False
 
 
-def parse_arguments() -> Args:
+def _parse_arguments() -> Args:
     """Parse command-line arguments.
 
     Returns:
@@ -637,7 +639,7 @@ def main() -> None:
     conversation with content to Markdown, and writes the results to the output
     directory.
     """
-    args = parse_arguments()
+    args = _parse_arguments()
 
     log_level = logging.DEBUG if args.verbose else logging.INFO
     logging.basicConfig(level=log_level, format="[%(levelname)-8s] %(message)s")
@@ -654,13 +656,13 @@ def main() -> None:
     skipped_count = 0
 
     for conversation in conversations:
-        if not has_content(conversation):
+        if not _has_content(conversation):
             logger.debug("Skipping empty conversation (%s)", conversation["uuid"])
             skipped_count += 1
             continue
 
         uuid = conversation["uuid"]
-        md_content = convert_to_markdown(conversation)
+        md_content = _convert_to_markdown(conversation)
         output_file = args.output_dir.joinpath(f"{uuid}.md")
         output_file.write_text(md_content)
 
