@@ -8,13 +8,13 @@ import shutil
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Final
 
-logger = logging.getLogger(__name__)
+logger: Final = logging.getLogger(__name__)
 
 # ASCII printable character range constants
-ASCII_SPACE = 32
-ASCII_TILDE = 127
+ASCII_SPACE: Final = 32
+ASCII_TILDE: Final = 127
 
 
 @dataclass(frozen=True)
