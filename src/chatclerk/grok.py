@@ -1,15 +1,17 @@
 """Convert data export from grok.com to Markdown."""
 
-import argparse
 import json
 import logging
 import re
 import shutil
 from dataclasses import dataclass, field
-from pathlib import Path
-from typing import Any, Final
+from typing import TYPE_CHECKING, Any, Final
 
+from chatclerk.argparse import Args, build_argument_parser
 from chatclerk.datetime import iso_timestamp_to_str, mongodb_timestamp_to_str
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 logger: Final = logging.getLogger(__name__)
 
@@ -429,52 +431,6 @@ def _has_content(conversation: dict[str, Any]) -> bool:
     return False
 
 
-@dataclass
-class Args(argparse.Namespace):
-    """Command-line arguments.
-
-    Attributes:
-        input_dir: Directory containing the Grok export data.
-        output_dir: Directory where Markdown files will be written.
-        verbose: Enable verbose logging.
-
-    """
-
-    input_dir: Path = field(init=False)
-    output_dir: Path = field(init=False)
-    verbose: bool = False
-
-
-def _parse_arguments() -> Args:
-    """Parse command-line arguments.
-
-    Returns:
-        Args: Parsed command-line arguments.
-
-    """
-    parser = argparse.ArgumentParser(
-        description="convert data export from grok.com to Markdown"
-    )
-    parser.add_argument(
-        "-i",
-        "--input-dir",
-        type=Path,
-        required=True,
-        help="directory containing grok.com export",
-    )
-    parser.add_argument(
-        "-o",
-        "--output-dir",
-        type=Path,
-        required=True,
-        help="directory to write Markdown files",
-    )
-    parser.add_argument(
-        "-v", "--verbose", action="store_true", help="enable verbose logging"
-    )
-    return parser.parse_args(namespace=Args())
-
-
 def main() -> None:
     """Convert Grok conversation exports to Markdown files.
 
@@ -482,7 +438,8 @@ def main() -> None:
     conversation with content to Markdown, and writes the results to the output
     directory along with any associated artifacts and attachments.
     """
-    args = _parse_arguments()
+    parser = build_argument_parser("grok.com")
+    args = parser.parse_args(namespace=Args())
 
     log_level = logging.DEBUG if args.verbose else logging.INFO
     logging.basicConfig(level=log_level, format="[%(levelname)-8s] %(message)s")
