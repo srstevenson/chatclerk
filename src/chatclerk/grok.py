@@ -113,7 +113,6 @@ def _extract_artifacts_from_message(message: str) -> tuple[str, list[ArtifactInf
         }
         ext = ext_map.get(content_type, ".txt")
 
-        # Create safe filename (strip existing extension from title if present)
         title_without_ext = title.rsplit(".", 1)[0] if "." in title else title
         safe_title = re.sub(r"[^\w\s-]", "", title_without_ext).strip()
         safe_title = safe_title.replace(" ", "_")
@@ -121,12 +120,7 @@ def _extract_artifacts_from_message(message: str) -> tuple[str, list[ArtifactInf
 
         artifacts.append(
             ArtifactInfo(
-                artifact_id=artifact_id,
-                artifact_version_id=artifact_version_id,
-                title=title,
-                content_type=content_type,
-                content=content,
-                filename=filename,
+                artifact_id, artifact_version_id, title, content_type, content, filename
             )
         )
 
@@ -213,11 +207,7 @@ def _extract_file_attachments(
             filename = f"{attachment_id}.bin"
             logger.debug("Attachment missing: %s", attachment_id)
 
-        attachments.append(
-            FileAttachmentInfo(
-                attachment_id=attachment_id, filename=filename, exists=exists
-            )
-        )
+        attachments.append(FileAttachmentInfo(attachment_id, filename, exists))
 
     return attachments
 
@@ -263,7 +253,7 @@ def _format_message(  # noqa: PLR0912, C901
 
     if create_time and (timestamp := mongodb_timestamp_to_str(create_time)):
         timestamp_line = f"*{timestamp}*"
-        if sender_lower == "assistant" and model and model != "unknown":
+        if sender_lower == "assistant" and model != "unknown":
             timestamp_line += f" | Model: {model}"
         header_parts.append(timestamp_line)
 
@@ -307,9 +297,7 @@ def _format_message(  # noqa: PLR0912, C901
     content = "\n\n".join(content_parts)
     formatted_text = f"{header_line}\n\n{content}"
 
-    return MessageResult(
-        formatted_text=formatted_text, artifacts=artifacts, attachments=attachments
-    )
+    return MessageResult(formatted_text, artifacts, attachments)
 
 
 def _convert_to_markdown(

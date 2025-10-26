@@ -212,7 +212,7 @@ def _format_tool_input(tool_name: str, tool_input: dict[str, Any]) -> str | None
             or empty.
 
     """
-    if not tool_input:  # Can be empty dict
+    if not tool_input:
         return None
 
     handlers = {
@@ -242,7 +242,7 @@ def _format_display_content(
             content.
 
     """
-    if not display_content:  # Can be null or empty
+    if not display_content:
         return None
 
     display_type = display_content.get("type", "")
@@ -521,7 +521,6 @@ def _convert_to_markdown(conversation: dict[str, Any]) -> str:
         len(conversation["chat_messages"]),
     )
 
-    # Build header metadata
     header_parts = [
         f"# {name}\n",
         f"- **UUID:** {uuid}",
@@ -536,7 +535,6 @@ def _convert_to_markdown(conversation: dict[str, Any]) -> str:
         if (message_block := _format_message(message))
     ]
 
-    # Combine header and messages
     header = "\n".join(header_parts)
     messages_section = "\n\n".join(message_blocks)
 

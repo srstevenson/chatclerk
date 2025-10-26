@@ -121,8 +121,8 @@ def _process_image_asset(part: dict[str, Any], user_dir: Path) -> tuple[str, Ima
 
     image_info = ImageInfo(asset, width, height, gen_id, filename)
 
-    width_str = str(width) if width is not None else "unknown"
-    height_str = str(height) if height is not None else "unknown"
+    width_str = str(width) if width else "unknown"
+    height_str = str(height) if height else "unknown"
     placeholder = f"*[Generated Image: {width_str}x{height_str}]*"
     logger.debug("Found generated image: %sx%s", width_str, height_str)
 
@@ -168,13 +168,7 @@ def _process_multimodal_content(
         content = "\n\n".join(content_items) if content_items else ""
         content = clean_text(content)
 
-        return Message(
-            role=role,
-            content=content,
-            timestamp=timestamp,
-            metadata=metadata,
-            images=image_list,
-        )
+        return Message(role, content, timestamp, metadata, image_list)
 
     return None
 
@@ -205,9 +199,7 @@ def _process_regular_content(
     content_stripped = content.strip()
 
     if content_stripped:
-        return Message(
-            role=role, content=content_stripped, timestamp=timestamp, metadata=metadata
-        )
+        return Message(role, content_stripped, timestamp, metadata)
 
     return None
 
@@ -265,7 +257,7 @@ def _traverse_message_tree(
     """
     messages: list[Message] = []
 
-    def visit(node_id: str) -> None:
+    def _visit(node_id: str) -> None:
         if node_id not in mapping:
             return
 
@@ -285,9 +277,9 @@ def _traverse_message_tree(
 
         children = node.get("children", [])
         for child_id in children:
-            visit(child_id)
+            _visit(child_id)
 
-    visit(start_id)
+    _visit(start_id)
     return messages
 
 
@@ -380,8 +372,7 @@ def _format_message_content(content: str) -> str:
 
     if content.startswith("{") and content.endswith("}"):
         try:
-            parsed = json.loads(content)
-            formatted_json = json.dumps(parsed, indent=2)
+            formatted_json = json.dumps(json.loads(content), indent=2)
         except (json.JSONDecodeError, ValueError):
             return content
         else:
@@ -428,12 +419,8 @@ def _format_message(
             else:
                 image_path = image_info.filename
 
-            width_str = (
-                str(image_info.width) if image_info.width is not None else "unknown"
-            )
-            height_str = (
-                str(image_info.height) if image_info.height is not None else "unknown"
-            )
+            width_str = str(image_info.width) if image_info.width else "unknown"
+            height_str = str(image_info.height) if image_info.height else "unknown"
             image_md = (
                 f"![Generated Image {image_num} "
                 f"({width_str}x{height_str})]({image_path})"
@@ -473,7 +460,6 @@ def _convert_to_markdown(
 
     logger.info("Converting conversation: %s (%s)", title, conversation_id)
 
-    # Build header metadata
     header_parts = [f"# {title}\n", f"- **Conversation ID:** {conversation_id}"]
 
     if create_time:
@@ -505,7 +491,6 @@ def _convert_to_markdown(
         if message.images:
             image_counter += len(message.images)
 
-    # Combine header and messages
     header = "\n".join(header_parts)
     messages_section = "\n\n".join(message_blocks)
 
@@ -536,9 +521,8 @@ def _copy_conversation_images(
             logger.warning("No filename for asset: %s", image_info.asset)
             continue
 
-        asset_id = image_info.asset.replace("sediment://", "")
+        asset_id = image_info.asset.removeprefix("sediment://")
 
-        # Find the matching PNG file (has format: file_<asset_id>-<uuid>.png)
         matching_files = list(user_dir.glob(f"{asset_id}-*.png"))
 
         if not matching_files:
