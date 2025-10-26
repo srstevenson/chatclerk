@@ -2,7 +2,7 @@
 
 chatclerk converts LLM chat exports to directories of Markdown files. It
 supports [ChatGPT], [Claude], and [Grok] exports, and preserves conversation
-structure, metadata, and associated assets such as generated images, artifacts,
+structure, metadata, and associated assets such as generated images, artefacts,
 and file attachments.
 
 It allows you to archive conversations from LLM services to storage under your
@@ -61,7 +61,7 @@ chatclerk-claude -i /path/to/claude-export -o claude-logs
 ```
 
 This converts all conversations to Markdown files in the `claude-logs`
-directory. Artifacts and tool results are preserved in the output.
+directory. Artefacts and tool results are preserved in the output.
 
 ### Grok
 
@@ -73,7 +73,7 @@ chatclerk-grok -i /path/to/grok-export -o grok-logs
 ```
 
 This converts all conversations to Markdown files in the `grok-logs` directory.
-Artifacts and file attachments are saved to subdirectories.
+Artefacts and file attachments are saved to subdirectories.
 
 ## Development
 
