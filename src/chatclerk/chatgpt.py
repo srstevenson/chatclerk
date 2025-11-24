@@ -4,7 +4,7 @@ import json
 import logging
 import shutil
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Final
+from typing import TYPE_CHECKING, Any, Final, cast
 
 from chatclerk.argparse import Args, build_argument_parser
 from chatclerk.datetime import unix_timestamp_to_str
@@ -94,6 +94,32 @@ def clean_text(text: str) -> str:
     return "".join(cleaned)
 
 
+def _find_image_file(asset_id: str, user_dir: Path) -> str:
+    """Find an image file by asset ID, checking multiple locations and formats.
+
+    Args:
+        asset_id: The asset ID to search for.
+        user_dir: Path to the user directory containing exported images.
+
+    Returns:
+        str: The filename of the found image, or a default PNG filename.
+
+    """
+    # Check user directory for PNG files
+    matching_files = list(user_dir.glob(f"{asset_id}-*.png"))
+    if matching_files:
+        return matching_files[0].name
+
+    # Check parent directory (export root) for JPEG files (sanitized images)
+    parent_dir = user_dir.parent
+    matching_files = list(parent_dir.glob(f"{asset_id}-*.jpeg"))
+    if matching_files:
+        return matching_files[0].name
+
+    # Default to PNG if not found
+    return f"{asset_id}.png"
+
+
 def _process_image_asset(part: dict[str, Any], user_dir: Path) -> tuple[str, ImageInfo]:
     """Process an image asset pointer and extract image metadata.
 
@@ -112,12 +138,15 @@ def _process_image_asset(part: dict[str, Any], user_dir: Path) -> tuple[str, Ima
     asset = part.get("asset_pointer", "")
 
     part_metadata = part.get("metadata", {})
-    dalle_meta = part_metadata.get("dalle", {})
-    gen_id = dalle_meta.get("gen_id")
+    dalle_meta = part_metadata.get("dalle") or {}  # pyright: ignore[reportUnknownVariableType]
+    generation_meta = part_metadata.get("generation") or {}  # pyright: ignore[reportUnknownVariableType]
+    gen_id = cast(
+        "str | None",
+        generation_meta.get("gen_id") or dalle_meta.get("gen_id"),  # pyright: ignore[reportUnknownMemberType]
+    )
 
     asset_id = asset.removeprefix("sediment://")
-    matching_files = list(user_dir.glob(f"{asset_id}-*.png"))
-    filename = matching_files[0].name if matching_files else f"{asset_id}.png"
+    filename = _find_image_file(asset_id, user_dir)
 
     image_info = ImageInfo(asset, width, height, gen_id, filename)
 
@@ -523,7 +552,13 @@ def _copy_conversation_images(
 
         asset_id = image_info.asset.removeprefix("sediment://")
 
+        # Check user directory for PNG files
         matching_files = list(user_dir.glob(f"{asset_id}-*.png"))
+
+        # If not found, check parent directory for JPEG files (sanitized images)
+        if not matching_files:
+            parent_dir = user_dir.parent
+            matching_files = list(parent_dir.glob(f"{asset_id}-*.jpeg"))
 
         if not matching_files:
             logger.warning("Image not found for asset: %s", asset_id)
