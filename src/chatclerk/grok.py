@@ -322,7 +322,7 @@ def _convert_to_markdown(
     system_prompt = conv_metadata.get("system_prompt_name")
 
     logger.info(
-        "Converting conversation: %s (%s, %d messages)",
+        "Converting: %s (%s, %d messages)",
         title,
         conv_id,
         len(conversation["responses"]),

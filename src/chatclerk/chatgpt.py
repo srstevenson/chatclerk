@@ -487,7 +487,7 @@ def _convert_to_markdown(
     is_archived = conversation.get("is_archived", False)
     model_slug = conversation.get("default_model_slug", "unknown")
 
-    logger.info("Converting conversation: %s (%s)", title, conversation_id)
+    logger.info("Converting: %s (%s)", title, conversation_id)
 
     header_parts = [f"# {title}\n", f"- **Conversation ID:** {conversation_id}"]
 

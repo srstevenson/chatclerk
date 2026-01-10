@@ -515,7 +515,7 @@ def _convert_to_markdown(conversation: dict[str, Any]) -> str:
     updated_at = iso_timestamp_to_str(conversation["updated_at"])
 
     logger.info(
-        "Converting conversation: %s (%s, %d messages)",
+        "Converting: %s (%s, %d messages)",
         name,
         uuid,
         len(conversation["chat_messages"]),
