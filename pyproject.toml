@@ -31,6 +31,7 @@ reportUnusedCallResult = false
 target-version = "py314"
 
 [tool.ruff.format]
+docstring-code-format = true
 skip-magic-trailing-comma = true
 
 [tool.ruff.lint]

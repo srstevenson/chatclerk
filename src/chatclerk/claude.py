@@ -520,7 +520,7 @@ def _has_content(conversation: dict[str, Any]) -> bool:
 
     Returns:
         `True` if the conversation has a name, messages, or attachments,
-            otherwise `False`.
+        otherwise `False`.
     """
     if conversation["name"].strip():
         return True

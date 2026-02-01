@@ -124,8 +124,8 @@ def _process_image_asset(part: dict[str, Any], user_dir: Path) -> tuple[str, Ima
 
     Returns:
         A tuple containing a placeholder text string and an `ImageInfo` object
-            with image metadata including asset ID, dimensions, generation ID,
-            and filename.
+        with image metadata including asset ID, dimensions, generation ID, and
+        filename.
     """
     width = part.get("width")
     height = part.get("height")
@@ -458,7 +458,7 @@ def _convert_to_markdown(
 
     Returns:
         A tuple containing the formatted Markdown string and a list of
-            `ImageInfo` objects.
+        `ImageInfo` objects.
     """
     title = conversation.get("title", "Untitled")
     conversation_id = conversation.get("conversation_id") or conversation.get("id", "")

@@ -303,7 +303,7 @@ def _convert_to_markdown(
 
     Returns:
         The formatted conversation as Markdown, list of artifacts, and list
-            of attachments.
+        of attachments.
     """
     conv_metadata = conversation["conversation"]
     conv_id = conv_metadata.get("id", "unknown")
