@@ -22,8 +22,7 @@ def _get_user_dir(input_dir: Path) -> Path:
         input_dir: Path to the directory containing the ChatGPT export data.
 
     Returns:
-        Path: Absolute path to the user directory containing exported images.
-
+        Absolute path to the user directory containing exported images.
     """
     user_json_path = input_dir.joinpath("user.json")
     with user_json_path.open() as f:
@@ -41,7 +40,6 @@ class ImageInfo:
         height: Image height in pixels, or `None` if unavailable.
         gen_id: DALL-E generation ID, or `None` if unavailable.
         filename: Filename for the exported image file.
-
     """
 
     asset: str
@@ -61,7 +59,6 @@ class Message:
         timestamp: Unix timestamp when the message was created, or `None`.
         metadata: Additional metadata associated with the message.
         images: List of generated image metadata.
-
     """
 
     role: str
@@ -81,8 +78,7 @@ def clean_text(text: str) -> str:
         text: The text to clean.
 
     Returns:
-        str: Text with private use area characters removed.
-
+        Text with private use area characters removed.
     """
     private_use_start = 0xE000
     private_use_end = 0xF8FF
@@ -102,8 +98,7 @@ def _find_image_file(asset_id: str, user_dir: Path) -> str:
         user_dir: Path to the user directory containing exported images.
 
     Returns:
-        str: The filename of the found image, or a default PNG filename.
-
+        The filename of the found image, or a default PNG filename.
     """
     # Check user directory for PNG files
     matching_files = list(user_dir.glob(f"{asset_id}-*.png"))
@@ -128,10 +123,9 @@ def _process_image_asset(part: dict[str, Any], user_dir: Path) -> tuple[str, Ima
         user_dir: Path to the user directory containing exported images.
 
     Returns:
-        tuple[str, ImageInfo]: A tuple containing a placeholder text string
-            and an `ImageInfo` object with image metadata including asset ID,
-            dimensions, generation ID, and filename.
-
+        A tuple containing a placeholder text string and an `ImageInfo` object
+            with image metadata including asset ID, dimensions, generation ID,
+            and filename.
     """
     width = part.get("width")
     height = part.get("height")
@@ -175,9 +169,7 @@ def _process_multimodal_content(
         user_dir: Path to the user directory containing exported images.
 
     Returns:
-        Message | None: A `Message` object if valid content exists, otherwise
-            `None`.
-
+        A `Message` object if valid content exists, otherwise `None`.
     """
     parts = content_obj.get("parts", [])
     content_items: list[str] = []
@@ -217,9 +209,7 @@ def _process_regular_content(
         timestamp: Unix timestamp when the message was created, or `None`.
 
     Returns:
-        Message | None: A `Message` object if valid content exists, otherwise
-            `None`.
-
+        A `Message` object if valid content exists, otherwise `None`.
     """
     parts = content_obj.get("parts", [])
     content = "\n".join(str(part) for part in parts if part)
@@ -247,9 +237,7 @@ def _process_message_content(
         user_dir: Path to the user directory containing exported images.
 
     Returns:
-        Message | None: A `Message` object if valid content exists, otherwise
-            `None`.
-
+        A `Message` object if valid content exists, otherwise `None`.
     """
     content_obj = message.get("content", {})
     content_type = content_obj.get("content_type", "")
@@ -281,8 +269,7 @@ def _traverse_message_tree(
         start_id: ID of the root node to start traversal from.
 
     Returns:
-        list[Message]: List of `Message` objects in conversation order.
-
+        List of `Message` objects in conversation order.
     """
     messages: list[Message] = []
 
@@ -320,9 +307,7 @@ def _format_search_results(metadata: dict[str, Any]) -> str | None:
             results.
 
     Returns:
-        str | None: Formatted Markdown string of search results, or `None` if
-            no results.
-
+        Formatted Markdown string of search results, or `None` if no results.
     """
     search_result_groups = metadata.get("search_result_groups", [])
     if not search_result_groups:
@@ -359,9 +344,7 @@ def _format_citations(metadata: dict[str, Any]) -> str | None:
         metadata: Message metadata dictionary potentially containing citations.
 
     Returns:
-        str | None: Formatted Markdown string of citations, or `None` if no
-            citations.
-
+        Formatted Markdown string of citations, or `None` if no citations.
     """
     citations = metadata.get("citations", [])
     if not citations:
@@ -394,8 +377,7 @@ def _format_message_content(content: str) -> str:
         content: The message content to format.
 
     Returns:
-        str: Formatted content with JSON in code blocks if applicable.
-
+        Formatted content with JSON in code blocks if applicable.
     """
     content = content.strip()
 
@@ -421,8 +403,7 @@ def _format_message(
         image_index_offset: Starting index for numbering images in this message.
 
     Returns:
-        str: The formatted message as a Markdown string.
-
+        The formatted message as a Markdown string.
     """
     if message.role == "tool":
         header = "## Tool Output"
@@ -476,9 +457,8 @@ def _convert_to_markdown(
         user_dir: Path to the user directory containing exported images.
 
     Returns:
-        tuple[str, list[ImageInfo]]: A tuple containing the formatted
-            Markdown string and a list of `ImageInfo` objects.
-
+        A tuple containing the formatted Markdown string and a list of
+            `ImageInfo` objects.
     """
     title = conversation.get("title", "Untitled")
     conversation_id = conversation.get("conversation_id") or conversation.get("id", "")
@@ -532,12 +512,10 @@ def _copy_conversation_images(
     """Copy conversation images to a subdirectory in the output location.
 
     Args:
-        conversation_id: The conversation identifier for naming the
-            subdirectory.
+        conversation_id: The conversation identifier for naming the subdirectory.
         images: List of `ImageInfo` objects.
         output_dir: Base output directory for processed conversations.
         user_dir: Path to the user directory containing source images.
-
     """
     if not images:
         return
@@ -579,9 +557,7 @@ def _has_content(conversation: dict[str, Any], user_dir: Path) -> bool:
         user_dir: Path to the user directory containing exported images.
 
     Returns:
-        bool: `True` if the conversation has a title and messages, otherwise
-            `False`.
-
+        `True` if the conversation has a title and messages, otherwise `False`.
     """
     if conversation.get("title", "").strip():
         mapping = conversation.get("mapping", {})

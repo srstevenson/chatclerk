@@ -31,7 +31,6 @@ class ArtifactInfo:
         content_type: MIME type of the artifact content.
         content: The actual artifact content.
         filename: Filename for the exported artifact file.
-
     """
 
     artifact_id: str
@@ -50,7 +49,6 @@ class FileAttachmentInfo:
         attachment_id: The attachment identifier (matches asset directory).
         filename: Filename for the exported attachment.
         exists: Whether the file exists in the asset server directory.
-
     """
 
     attachment_id: str
@@ -66,7 +64,6 @@ class MessageResult:
         formatted_text: The formatted Markdown text.
         artifacts: List of artifacts extracted from the message.
         attachments: List of file attachments in the message.
-
     """
 
     formatted_text: str
@@ -81,9 +78,7 @@ def _extract_artifacts_from_message(message: str) -> tuple[str, list[ArtifactInf
         message: The message text potentially containing xaiArtifact tags.
 
     Returns:
-        tuple[str, list[ArtifactInfo]]: Cleaned message text and list of
-            extracted artifacts.
-
+        Cleaned message text and list of extracted artifacts.
     """
     artifacts: list[ArtifactInfo] = []
 
@@ -139,8 +134,7 @@ def _detect_file_type(file_path: Path) -> str:  # noqa: PLR0911, C901
         file_path: Path to the file to detect.
 
     Returns:
-        str: File extension based on detected type.
-
+        File extension based on detected type.
     """
     if not file_path.exists():
         return ".bin"
@@ -188,8 +182,7 @@ def _extract_file_attachments(
         user_dir: Path to the asset server directory.
 
     Returns:
-        list[FileAttachmentInfo]: List of file attachment information.
-
+        List of file attachment information.
     """
     attachments: list[FileAttachmentInfo] = []
     file_attachments = response_data.get("file_attachments", [])
@@ -223,8 +216,7 @@ def _format_message(  # noqa: PLR0912, C901
         conversation_id: The conversation ID for constructing asset paths.
 
     Returns:
-        MessageResult: The formatted message and associated assets.
-
+        The formatted message and associated assets.
     """
     response_data = response["response"]
     sender = response_data["sender"]
@@ -310,9 +302,8 @@ def _convert_to_markdown(
         user_dir: Path to the asset server directory.
 
     Returns:
-        tuple[str, list[ArtifactInfo], list[FileAttachmentInfo]]: The formatted
-            conversation as Markdown, list of artifacts, and list of attachments.
-
+        The formatted conversation as Markdown, list of artifacts, and list
+            of attachments.
     """
     conv_metadata = conversation["conversation"]
     conv_id = conv_metadata.get("id", "unknown")
@@ -371,7 +362,6 @@ def _copy_conversation_assets(
         attachments: List of attachments to copy.
         output_dir: Base output directory for processed conversations.
         user_dir: Path to the asset server directory containing source files.
-
     """
     if not artifacts and not attachments:
         return
@@ -403,9 +393,7 @@ def _has_content(conversation: dict[str, Any]) -> bool:
         conversation: Dictionary containing the conversation data.
 
     Returns:
-        bool: `True` if the conversation has a title or messages, otherwise
-            `False`.
-
+        `True` if the conversation has a title or messages, otherwise `False`.
     """
     conv_metadata = conversation["conversation"]
     if (title := conv_metadata.get("title")) and title.strip():

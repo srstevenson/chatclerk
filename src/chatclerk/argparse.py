@@ -14,7 +14,6 @@ class Args(argparse.Namespace):
         input_dir: Directory containing the export data.
         output_dir: Directory where Markdown files will be written.
         verbose: Enable verbose logging.
-
     """
 
     input_dir: Path = field(init=False)
@@ -28,8 +27,7 @@ def build_argument_parser(
     """Build command-line argument parser.
 
     Returns:
-        ArgumentParser: Command-line argument parser.
-
+        Command-line argument parser.
     """
     parser = argparse.ArgumentParser(
         description=f"convert data export from {service} to Markdown"

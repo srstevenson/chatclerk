@@ -34,7 +34,7 @@ target-version = "py314"
 skip-magic-trailing-comma = true
 
 [tool.ruff.lint]
-ignore = ["COM812", "D203", "D213"]
+ignore = ["COM812"]
 select = ["ALL"]
 
 [tool.ruff.lint.flake8-tidy-imports]
@@ -42,3 +42,6 @@ ban-relative-imports = "all"
 
 [tool.ruff.lint.isort]
 split-on-trailing-comma = false
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
