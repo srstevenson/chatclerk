@@ -72,7 +72,7 @@ def _format_json_if_valid(text: str) -> ToolOutput:
     try:
         formatted = json.dumps(json.loads(text), indent=2)
         return ToolOutput(text=formatted, language=Language.JSON)
-    except (json.JSONDecodeError, ValueError):
+    except json.JSONDecodeError, ValueError:
         return ToolOutput(text=text, language=Language.TEXT)
 
 

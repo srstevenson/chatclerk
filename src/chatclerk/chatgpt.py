@@ -384,7 +384,7 @@ def _format_message_content(content: str) -> str:
     if content.startswith("{") and content.endswith("}"):
         try:
             formatted_json = json.dumps(json.loads(content), indent=2)
-        except (json.JSONDecodeError, ValueError):
+        except json.JSONDecodeError, ValueError:
             return content
         else:
             return f"```json\n{formatted_json}\n```"
@@ -482,7 +482,7 @@ def _convert_to_markdown(
     mapping = conversation.get("mapping", {})
     messages = _traverse_message_tree(mapping, user_dir)
 
-    messages = sorted(messages, key=lambda m: m.timestamp if m.timestamp else 0)
+    messages = sorted(messages, key=lambda m: m.timestamp or 0)
 
     logger.debug("Extracted %d visible messages", len(messages))
 
