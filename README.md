@@ -1,9 +1,9 @@
 # chatclerk
 
 chatclerk converts LLM chat exports to directories of Markdown files. It
-supports [ChatGPT], [Claude], and [Grok] exports, and preserves conversation
-structure, metadata, and associated assets such as generated images, artefacts,
-and file attachments.
+supports [ChatGPT], [Claude], [Grok], and [Kagi Assistant] exports, and
+preserves conversation structure, metadata, and associated assets such as
+generated images, artefacts, and file attachments.
 
 It allows you to archive conversations from LLM services to storage under your
 control, to provide indefinite access independent of LLM service uptime or
@@ -30,13 +30,13 @@ cd chatclerk
 uv tool install .
 ```
 
-This will install the `chatclerk-chatgpt`, `chatclerk-claude`, and
-`chatclerk-grok` executables into `~/.local/bin`. Ensure `~/.local/bin` is in
-your shell's `PATH`.
+This will install the `chatclerk-chatgpt`, `chatclerk-claude`, `chatclerk-grok`,
+and `chatclerk-kagi` executables into `~/.local/bin`. Ensure `~/.local/bin` is
+in your shell's `PATH`.
 
 ## Usage
 
-chatclerk provides three command-line tools, one for each supported LLM service.
+chatclerk provides four command-line tools, one for each supported LLM service.
 
 ### ChatGPT
 
@@ -75,6 +75,19 @@ chatclerk-grok -i /path/to/grok-export -o grok-logs
 This converts all conversations to Markdown files in the `grok-logs` directory.
 Artefacts and file attachments are saved to subdirectories.
 
+### Kagi Assistant
+
+To convert a Kagi Assistant export, download your data to JSON using an export
+script such as
+<https://gist.github.com/TjeuKayim/17ccaac6f872107821700663753c5282>. Then run:
+
+```sh
+chatclerk-kagi -i /path/to/kagi-export.json -o kagi-logs
+```
+
+This writes each thread's `markdownExport` directly to a Markdown file in the
+`kagi-logs` directory.
+
 ## Development
 
 chatclerk uses [uv] for dependency management and [Ruff] and [basedpyright] for
@@ -106,6 +119,7 @@ make check
 [Claude]: https://claude.ai/
 [Grok]: https://grok.com/
 [isync]: https://isync.sourceforge.io/
+[Kagi Assistant]: https://kagi.com/assistant
 [OfflineIMAP]: https://github.com/OfflineIMAP/offlineimap3
 [Ruff]: https://docs.astral.sh/ruff/
 [uv]: https://docs.astral.sh/uv/

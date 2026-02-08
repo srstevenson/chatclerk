@@ -22,22 +22,24 @@ class Args(argparse.Namespace):
 
 
 def build_argument_parser(
-    service: Literal["chatgpt.com", "claude.ai", "grok.com"],
+    service: Literal["chatgpt.com", "claude.ai", "grok.com", "kagi.com"],
+    *,
+    input_arg: str = "--input-dir",
+    input_help: str | None = None,
 ) -> argparse.ArgumentParser:
     """Build command-line argument parser.
 
     Returns:
         Command-line argument parser.
     """
+    if input_help is None:
+        input_help = f"directory containing {service} export"
+
     parser = argparse.ArgumentParser(
         description=f"convert data export from {service} to Markdown"
     )
     parser.add_argument(
-        "-i",
-        "--input-dir",
-        type=Path,
-        required=True,
-        help=f"directory containing {service} export",
+        "-i", input_arg, type=Path, dest="input_dir", required=True, help=input_help
     )
     parser.add_argument(
         "-o",

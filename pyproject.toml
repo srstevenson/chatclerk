@@ -11,6 +11,7 @@ dependencies = []
 chatclerk-chatgpt = "chatclerk.chatgpt:main"
 chatclerk-claude = "chatclerk.claude:main"
 chatclerk-grok = "chatclerk.grok:main"
+chatclerk-kagi = "chatclerk.kagi:main"
 
 [build-system]
 requires = ["uv_build>=0.9.5,<0.10.0"]
