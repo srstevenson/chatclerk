@@ -29,6 +29,11 @@ def build_argument_parser(
 ) -> argparse.ArgumentParser:
     """Build command-line argument parser.
 
+    Args:
+        service: Service domain used in help text for the input directory.
+        input_arg: Optional override for the input directory flag name.
+        input_help: Optional override for the input directory help text.
+
     Returns:
         Command-line argument parser.
     """
