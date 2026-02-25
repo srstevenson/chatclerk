@@ -91,7 +91,7 @@ This writes each thread's `markdownExport` directly to a Markdown file in the
 ## Development
 
 chatclerk uses [uv] for dependency management and [Ruff] and [ty] for
-formatting, linting, and type checking.
+formatting, linting, and type checking, orchestrated with [Just].
 
 To clone the repository and set up a development environment run:
 
@@ -101,23 +101,17 @@ cd chatclerk
 uv sync
 ```
 
-Format code and run linters with:
+Format code and run the linter and type-checker with:
 
 ```sh
-make fmt
-make lint
-```
-
-Check the code formatting and linting without modifying files with:
-
-```sh
-make check
+just fmt lint
 ```
 
 [ChatGPT]: https://chatgpt.com/
 [Claude]: https://claude.ai/
 [Grok]: https://grok.com/
 [isync]: https://isync.sourceforge.io/
+[Just]: https://github.com/casey/just
 [Kagi Assistant]: https://kagi.com/assistant
 [OfflineIMAP]: https://github.com/OfflineIMAP/offlineimap3
 [Ruff]: https://docs.astral.sh/ruff/
