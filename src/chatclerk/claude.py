@@ -308,7 +308,7 @@ def _process_tool_use(item: dict[str, Any], text_parts: list[str]) -> str:
     elif tool_name in ["web_search", "web_fetch", "repl"] and (
         tool_input_text := _format_tool_input(tool_name, item["input"])
     ):
-        text_parts.append(tool_input_text)
+        text_parts.append(tool_input_text)  # ty: ignore[possibly-unresolved-reference]
 
     return tool_name
 
@@ -328,12 +328,12 @@ def _process_tool_result(item: dict[str, Any], text_parts: list[str]) -> None:
     result_content = item["content"]
     if isinstance(result_content, list):
         text_parts.extend(
-            result_text
-            for result_item in result_content  # pyright: ignore[reportUnknownVariableType]
+            result_text  # ty: ignore[possibly-unresolved-reference]
+            for result_item in result_content
             if isinstance(result_item, dict)
-            and result_item.get("type") == "text"  # pyright: ignore[reportUnknownMemberType]
+            and result_item.get("type") == "text"
             and (
-                result_text := _format_tool_result_text(result_item["text"], tool_name)  # pyright: ignore[reportUnknownArgumentType]
+                result_text := _format_tool_result_text(result_item["text"], tool_name)
             )
         )
 

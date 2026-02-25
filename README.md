@@ -90,7 +90,7 @@ This writes each thread's `markdownExport` directly to a Markdown file in the
 
 ## Development
 
-chatclerk uses [uv] for dependency management and [Ruff] and [basedpyright] for
+chatclerk uses [uv] for dependency management and [Ruff] and [ty] for
 formatting, linting, and type checking.
 
 To clone the repository and set up a development environment run:
@@ -114,7 +114,6 @@ Check the code formatting and linting without modifying files with:
 make check
 ```
 
-[basedpyright]: https://docs.basedpyright.com/
 [ChatGPT]: https://chatgpt.com/
 [Claude]: https://claude.ai/
 [Grok]: https://grok.com/
@@ -122,4 +121,5 @@ make check
 [Kagi Assistant]: https://kagi.com/assistant
 [OfflineIMAP]: https://github.com/OfflineIMAP/offlineimap3
 [Ruff]: https://docs.astral.sh/ruff/
+[ty]: https://docs.astral.sh/ty/
 [uv]: https://docs.astral.sh/uv/

@@ -132,11 +132,10 @@ def _process_image_asset(part: dict[str, Any], user_dir: Path) -> tuple[str, Ima
     asset = part.get("asset_pointer", "")
 
     part_metadata = part.get("metadata", {})
-    dalle_meta = part_metadata.get("dalle") or {}  # pyright: ignore[reportUnknownVariableType]
-    generation_meta = part_metadata.get("generation") or {}  # pyright: ignore[reportUnknownVariableType]
+    dalle_meta = part_metadata.get("dalle") or {}
+    generation_meta = part_metadata.get("generation") or {}
     gen_id = cast(
-        "str | None",
-        generation_meta.get("gen_id") or dalle_meta.get("gen_id"),  # pyright: ignore[reportUnknownMemberType]
+        "str | None", generation_meta.get("gen_id") or dalle_meta.get("gen_id")
     )
 
     asset_id = asset.removeprefix("sediment://")
@@ -177,13 +176,13 @@ def _process_multimodal_content(
 
     for part in parts:
         if isinstance(part, dict):
-            part_type = part.get("content_type", "")  # pyright: ignore[reportUnknownVariableType, reportUnknownMemberType]
+            part_type = part.get("content_type", "")
             if part_type == "image_asset_pointer":
-                placeholder, image_info = _process_image_asset(part, user_dir)  # pyright: ignore[reportUnknownArgumentType]
+                placeholder, image_info = _process_image_asset(part, user_dir)
                 content_items.append(placeholder)
                 image_list.append(image_info)
         elif isinstance(part, str) and (stripped := part.strip()):
-            content_items.append(stripped)
+            content_items.append(stripped)  # ty: ignore[possibly-unresolved-reference]
 
     if content_items or image_list:
         content = "\n\n".join(content_items) if content_items else ""
@@ -289,7 +288,7 @@ def _traverse_message_tree(
             elif role in ["user", "assistant", "tool"] and (
                 msg := _process_message_content(message, role, metadata, user_dir)
             ):
-                messages.append(msg)
+                messages.append(msg)  # ty: ignore[possibly-unresolved-reference]
 
         children = node.get("children", [])
         for child_id in children:

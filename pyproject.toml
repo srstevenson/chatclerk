@@ -18,15 +18,7 @@ requires = ["uv_build>=0.9.5,<0.10.0"]
 build-backend = "uv_build"
 
 [dependency-groups]
-dev = ["basedpyright>=1.32.1", "ruff>=0.14.2"]
-
-[tool.basedpyright]
-typeCheckingMode = "recommended"
-pythonVersion = "3.14"
-reportAny = false
-reportExplicitAny = false
-reportImplicitStringConcatenation = false
-reportUnusedCallResult = false
+dev = ["ruff>=0.14.2", "ty>=0.0.18"]
 
 [tool.ruff]
 target-version = "py314"
@@ -36,8 +28,10 @@ docstring-code-format = true
 skip-magic-trailing-comma = true
 
 [tool.ruff.lint]
-ignore = ["COM812"]
 select = ["ALL"]
+ignore = [
+  "COM812", # Trailing comma missing
+]
 
 [tool.ruff.lint.flake8-tidy-imports]
 ban-relative-imports = "all"
@@ -47,3 +41,6 @@ split-on-trailing-comma = false
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
+
+[tool.ty.rules]
+all = "error"
