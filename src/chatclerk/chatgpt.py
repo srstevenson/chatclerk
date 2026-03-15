@@ -7,10 +7,13 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Final, cast
 
 from chatclerk.argparse import Args, build_argument_parser
-from chatclerk.datetime import unix_timestamp_to_str
+from chatclerk.datetime import iso_timestamp_to_str, unix_timestamp_to_str
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+DEEP_RESEARCH_RESOURCE_PREFIX: Final = "/Deep Research App/"
+DEEP_RESEARCH_CONNECTOR_ID: Final = "connector_openai_deep_research"
 
 logger: Final = logging.getLogger(__name__)
 
@@ -59,6 +62,7 @@ class Message:
         timestamp: Unix timestamp when the message was created, or `None`.
         metadata: Additional metadata associated with the message.
         images: List of generated image metadata.
+        deep_research: Deep Research report and plan metadata, if present.
     """
 
     role: str
@@ -66,6 +70,27 @@ class Message:
     timestamp: float | None
     metadata: dict[str, Any]
     images: list[ImageInfo] = field(default_factory=list)
+    deep_research: DeepResearchInfo | None = None
+
+
+@dataclass(frozen=True)
+class DeepResearchStep:
+    """Representation of a Deep Research plan step."""
+
+    text: str
+    status: str
+
+
+@dataclass(frozen=True)
+class DeepResearchInfo:
+    """Representation of Deep Research metadata embedded in widget state."""
+
+    status: str
+    plan_title: str
+    plan_steps: list[DeepResearchStep] = field(default_factory=list)
+    last_updated_at: str | None = None
+    research_started_at: str | None = None
+    research_stopped_at: str | None = None
 
 
 def clean_text(text: str) -> str:
@@ -88,6 +113,18 @@ def clean_text(text: str) -> str:
         if not (private_use_start <= code <= private_use_end):
             cleaned.append(char)
     return "".join(cleaned)
+
+
+def _iso_timestamp_or_none(timestamp: object) -> str | None:
+    """Convert an ISO 8601 timestamp to a human-readable string if possible."""
+    if not isinstance(timestamp, str) or not timestamp:
+        return None
+
+    try:
+        return iso_timestamp_to_str(timestamp)
+    except ValueError:
+        logger.debug("Failed to parse ISO timestamp: %s", timestamp)
+        return None
 
 
 def _find_image_file(asset_id: str, user_dir: Path) -> str:
@@ -222,6 +259,189 @@ def _process_regular_content(
     return None
 
 
+def _process_code_content(
+    content_obj: dict[str, Any],
+    role: str,
+    metadata: dict[str, Any],
+    timestamp: float | None,
+) -> Message | None:
+    """Process code message content."""
+    content = clean_text(content_obj.get("text", "")).strip()
+    if not content:
+        return None
+
+    language = content_obj.get("language", "")
+    if isinstance(language, str) and language:
+        content = f"```{language}\n{content}\n```"
+
+    return Message(role, content, timestamp, metadata)
+
+
+def _parse_deep_research_info(widget_state: dict[str, Any]) -> DeepResearchInfo | None:
+    """Parse Deep Research plan and status details from widget state."""
+    plan = widget_state.get("plan") or {}
+    steps_data = plan.get("steps") or []
+    plan_steps: list[DeepResearchStep] = []
+
+    for step in steps_data:
+        if not isinstance(step, dict):
+            continue
+
+        text = step.get("text", "")
+        if not isinstance(text, str) or not text.strip():
+            continue
+
+        status = step.get("status", "")
+        if not isinstance(status, str):
+            status = ""
+
+        plan_steps.append(DeepResearchStep(text.strip(), status))
+
+    status = widget_state.get("status", "")
+    if not isinstance(status, str):
+        status = ""
+
+    plan_title = plan.get("title", "")
+    if not isinstance(plan_title, str):
+        plan_title = ""
+
+    last_updated_at = _iso_timestamp_or_none(widget_state.get("last_updated_at"))
+    research_started_at = _iso_timestamp_or_none(
+        widget_state.get("research_started_at")
+    )
+    research_stopped_at = _iso_timestamp_or_none(
+        widget_state.get("research_stopped_at")
+    )
+
+    if not any(
+        [
+            status,
+            plan_title,
+            plan_steps,
+            last_updated_at,
+            research_started_at,
+            research_stopped_at,
+        ]
+    ):
+        return None
+
+    return DeepResearchInfo(
+        status=status,
+        plan_title=plan_title,
+        plan_steps=plan_steps,
+        last_updated_at=last_updated_at,
+        research_started_at=research_started_at,
+        research_stopped_at=research_stopped_at,
+    )
+
+
+def _extract_deep_research_widget_state(
+    metadata: dict[str, Any],
+) -> dict[str, Any] | None:
+    """Extract Deep Research widget state JSON from message metadata."""
+    widget_state = metadata.get("widget_state")
+    if isinstance(widget_state, str):
+        try:
+            parsed = json.loads(widget_state)
+        except json.JSONDecodeError:
+            logger.debug("Failed to decode widget_state JSON")
+        else:
+            return cast("dict[str, Any]", parsed)
+
+    chatgpt_sdk = metadata.get("chatgpt_sdk") or {}
+    widget_state = chatgpt_sdk.get("widget_state")
+    if isinstance(widget_state, str):
+        try:
+            parsed = json.loads(widget_state)
+        except json.JSONDecodeError:
+            logger.debug("Failed to decode chatgpt_sdk.widget_state JSON")
+        else:
+            return cast("dict[str, Any]", parsed)
+
+    return None
+
+
+def _build_deep_research_message(
+    message: dict[str, Any], metadata: dict[str, Any], user_dir: Path
+) -> Message | None:
+    """Build a synthetic message for Deep Research content embedded in metadata."""
+    widget_state = _extract_deep_research_widget_state(metadata)
+    if not widget_state:
+        return None
+
+    deep_research = _parse_deep_research_info(widget_state)
+    report_message = widget_state.get("report_message")
+
+    if isinstance(report_message, dict):
+        author = report_message.get("author", {})
+        role = author.get("role", "assistant")
+        if not isinstance(role, str) or not role:
+            role = "assistant"
+
+        report_metadata = report_message.get("metadata", {})
+        if not isinstance(report_metadata, dict):
+            report_metadata = {}
+
+        if report := _process_message_content(
+            report_message, role, report_metadata, user_dir
+        ):
+            return Message(
+                report.role,
+                report.content,
+                report.timestamp,
+                report.metadata,
+                report.images,
+                deep_research,
+            )
+
+    if deep_research is None:
+        return None
+
+    timestamp = message.get("create_time")
+    if isinstance(timestamp, int):
+        timestamp = float(timestamp)
+    elif not isinstance(timestamp, float):
+        timestamp = None
+
+    return Message("assistant", "", timestamp, {}, deep_research=deep_research)
+
+
+def _is_deep_research_message(
+    message: dict[str, Any], metadata: dict[str, Any]
+) -> bool:
+    """Check whether a message belongs to the Deep Research app flow."""
+    if _extract_deep_research_widget_state(metadata):
+        return True
+
+    invoked_resource = metadata.get("invoked_resource") or {}
+    resource_uri = invoked_resource.get("resource_uri", "")
+    if isinstance(resource_uri, str) and resource_uri.startswith(
+        DEEP_RESEARCH_RESOURCE_PREFIX
+    ):
+        return True
+
+    chatgpt_sdk = metadata.get("chatgpt_sdk") or {}
+    if chatgpt_sdk.get("attribution_id") == DEEP_RESEARCH_CONNECTOR_ID:
+        return True
+
+    content = message.get("content", {})
+    parts = content.get("parts", [])
+    for part in parts:
+        if isinstance(part, str) and DEEP_RESEARCH_RESOURCE_PREFIX in part:
+            return True
+
+    return False
+
+
+def _deep_research_dedupe_id(node_id: str, metadata: dict[str, Any]) -> str:
+    """Build a stable dedupe identifier for a Deep Research message."""
+    widget_state = _extract_deep_research_widget_state(metadata) or {}
+    report_message = widget_state.get("report_message")
+    if isinstance(report_message, dict) and isinstance(report_message.get("id"), str):
+        return cast("str", report_message["id"])
+    return node_id
+
+
 def _process_message_content(
     message: dict[str, Any], role: str, metadata: dict[str, Any], user_dir: Path
 ) -> Message | None:
@@ -251,7 +471,40 @@ def _process_message_content(
             content_obj, role, metadata, timestamp, user_dir
         )
 
+    if content_type == "code":
+        return _process_code_content(content_obj, role, metadata, timestamp)
+
     return _process_regular_content(content_obj, role, metadata, timestamp)
+
+
+def _extract_message_from_node(
+    node_id: str, message: dict[str, Any], user_dir: Path, deep_research_ids: set[str]
+) -> Message | None:
+    """Extract a renderable message from a conversation node."""
+    author = message.get("author", {})
+    role = author.get("role", "")
+    metadata = message.get("metadata", {})
+
+    if role not in ["user", "assistant", "tool"]:
+        return None
+
+    deep_research_message = _build_deep_research_message(message, metadata, user_dir)
+    if deep_research_message is not None:
+        dedupe_id = _deep_research_dedupe_id(node_id, metadata)
+        if dedupe_id in deep_research_ids:
+            return None
+        deep_research_ids.add(dedupe_id)
+        return deep_research_message
+
+    if _is_deep_research_message(message, metadata):
+        logger.debug("Skipping Deep Research plumbing message: %s", role)
+        return None
+
+    if metadata.get("is_visually_hidden_from_conversation"):
+        logger.debug("Skipping hidden message: %s", role)
+        return None
+
+    return _process_message_content(message, role, metadata, user_dir)
 
 
 def _traverse_message_tree(
@@ -271,6 +524,7 @@ def _traverse_message_tree(
         List of `Message` objects in conversation order.
     """
     messages: list[Message] = []
+    deep_research_ids: set[str] = set()
 
     def _visit(node_id: str) -> None:
         if node_id not in mapping:
@@ -278,17 +532,14 @@ def _traverse_message_tree(
 
         node = mapping[node_id]
 
-        if message := node.get("message"):
-            author = message.get("author", {})
-            role = author.get("role", "")
-            metadata = message.get("metadata", {})
-
-            if metadata.get("is_visually_hidden_from_conversation"):
-                logger.debug("Skipping hidden message: %s", role)
-            elif role in ["user", "assistant", "tool"] and (
-                msg := _process_message_content(message, role, metadata, user_dir)
-            ):
-                messages.append(msg)  # ty: ignore[possibly-unresolved-reference]
+        message = node.get("message")
+        msg = (
+            _extract_message_from_node(node_id, message, user_dir, deep_research_ids)
+            if message is not None
+            else None
+        )
+        if msg is not None:
+            messages.append(msg)
 
         children = node.get("children", [])
         for child_id in children:
@@ -391,6 +642,40 @@ def _format_message_content(content: str) -> str:
     return content
 
 
+def _format_deep_research(message: Message) -> str | None:
+    """Format Deep Research metadata as Markdown."""
+    deep_research = message.deep_research
+    if deep_research is None:
+        return None
+
+    lines = ["*Deep Research*"]
+
+    if deep_research.status:
+        status = deep_research.status.replace("_", " ").title()
+        lines.append(f"- Status: {status}")
+    if deep_research.research_started_at:
+        lines.append(f"- Started: {deep_research.research_started_at}")
+    if deep_research.research_stopped_at:
+        lines.append(f"- Completed: {deep_research.research_stopped_at}")
+    elif deep_research.last_updated_at:
+        lines.append(f"- Last Updated: {deep_research.last_updated_at}")
+
+    if deep_research.plan_title:
+        lines.append("")
+        lines.append("### Research Plan")
+        lines.append(f"*{deep_research.plan_title}*")
+    elif deep_research.plan_steps:
+        lines.append("")
+        lines.append("### Research Plan")
+
+    status_prefixes = {"completed": "[x]", "in_progress": "[-]", "pending": "[ ]"}
+    for step in deep_research.plan_steps:
+        prefix = status_prefixes.get(step.status, "[ ]")
+        lines.append(f"- {prefix} {step.text}")
+
+    return "\n".join(lines)
+
+
 def _format_message(
     message: Message, conversation_id: str = "", image_index_offset: int = 0
 ) -> str:
@@ -414,6 +699,9 @@ def _format_message(
         timestamp_str = f"\n\n*{unix_timestamp_to_str(message.timestamp)}*"
 
     content_parts: list[str] = []
+
+    if deep_research := _format_deep_research(message):
+        content_parts.append(deep_research)
 
     if message.content:
         formatted_content = _format_message_content(message.content)
