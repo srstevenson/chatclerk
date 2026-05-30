@@ -219,7 +219,7 @@ def _process_multimodal_content(
                 content_items.append(placeholder)
                 image_list.append(image_info)
         elif isinstance(part, str) and (stripped := part.strip()):
-            content_items.append(stripped)  # ty: ignore[possibly-unresolved-reference]
+            content_items.append(stripped)
 
     if content_items or image_list:
         content = "\n\n".join(content_items) if content_items else ""

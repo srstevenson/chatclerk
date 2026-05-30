@@ -244,7 +244,7 @@ def _format_message(  # noqa: PLR0912, C901
     header_parts: list[str] = [header]
 
     if create_time and (timestamp := mongodb_timestamp_to_str(create_time)):
-        timestamp_line = f"*{timestamp}*"  # ty: ignore[possibly-unresolved-reference]
+        timestamp_line = f"*{timestamp}*"
         if sender_lower == "assistant" and model != "unknown":
             timestamp_line += f" | Model: {model}"
         header_parts.append(timestamp_line)
@@ -259,7 +259,7 @@ def _format_message(  # noqa: PLR0912, C901
         and (width := metadata.get("generated_image_width"))
         and (height := metadata.get("generated_image_height"))
     ):
-        content_parts.append(f"*[Generated Image: {width}x{height}]*")  # ty: ignore[possibly-unresolved-reference]
+        content_parts.append(f"*[Generated Image: {width}x{height}]*")
 
     if metadata and metadata.get("usedCustomInstructions"):
         content_parts.append("*[Used custom instructions]*")
@@ -322,9 +322,9 @@ def _convert_to_markdown(
     header_parts = [f"# {title}\n", f"- **Conversation ID:** {conv_id}"]
 
     if create_time and (created := iso_timestamp_to_str(create_time)):
-        header_parts.append(f"- **Created:** {created}")  # ty: ignore[possibly-unresolved-reference]
+        header_parts.append(f"- **Created:** {created}")
     if modify_time and (modified := iso_timestamp_to_str(modify_time)):
-        header_parts.append(f"- **Updated:** {modified}")  # ty: ignore[possibly-unresolved-reference]
+        header_parts.append(f"- **Updated:** {modified}")
     if system_prompt:
         header_parts.append(f"- **System Prompt:** {system_prompt}")
 

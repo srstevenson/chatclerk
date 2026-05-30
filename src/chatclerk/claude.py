@@ -308,7 +308,7 @@ def _process_tool_use(item: dict[str, Any], text_parts: list[str]) -> str:
     elif tool_name in ["web_search", "web_fetch", "repl"] and (
         tool_input_text := _format_tool_input(tool_name, item["input"])
     ):
-        text_parts.append(tool_input_text)  # ty: ignore[possibly-unresolved-reference]
+        text_parts.append(tool_input_text)
 
     return tool_name
 
@@ -328,7 +328,7 @@ def _process_tool_result(item: dict[str, Any], text_parts: list[str]) -> None:
     result_content = item["content"]
     if isinstance(result_content, list):
         text_parts.extend(
-            result_text  # ty: ignore[possibly-unresolved-reference]
+            result_text
             for result_item in result_content
             if isinstance(result_item, dict)
             and result_item.get("type") == "text"
