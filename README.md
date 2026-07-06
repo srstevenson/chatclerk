@@ -77,16 +77,17 @@ Artefacts and file attachments are saved to subdirectories.
 
 ### Kagi Assistant
 
-To convert a Kagi Assistant export, download your data to JSON using an export
-script such as
-<https://gist.github.com/TjeuKayim/17ccaac6f872107821700663753c5282>. Then run:
+To convert a Kagi Assistant export, download your data to JSON using
+`kagi-asssistant-export.js` from this repository. Paste it into the browser
+console on <https://assistant.kagi.com>; it downloads a file named like
+`2026-07-06-kagi-assistant-export.json`. Then run:
 
 ```sh
-chatclerk-kagi -i /path/to/kagi-export.json -o kagi-logs
+chatclerk-kagi -i /path/to/2026-07-06-kagi-assistant-export.json -o kagi-logs
 ```
 
-This writes each thread's `markdownExport` directly to a Markdown file in the
-`kagi-logs` directory.
+This builds Markdown from each conversation's messages and writes one Markdown
+file per conversation to the `kagi-logs` directory.
 
 ## Development
 
