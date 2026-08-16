@@ -4,18 +4,18 @@ import json
 import logging
 import shutil
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Final, cast
+from pathlib import Path
+from typing import Any, Final, cast
 
 from chatclerk.argparse import Args, build_argument_parser
 from chatclerk.datetime import iso_timestamp_to_str, unix_timestamp_to_str
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 DEEP_RESEARCH_RESOURCE_PREFIX: Final = "/Deep Research App/"
 DEEP_RESEARCH_CONNECTOR_ID: Final = "connector_openai_deep_research"
 
 logger: Final = logging.getLogger(__name__)
+ASSET_FILENAMES_PATH: Final = "conversation_asset_file_names.json"
+SUPPORTED_IMAGE_EXTENSIONS: Final = {".jpeg", ".jpg", ".png"}
 
 
 def _get_user_dir(input_dir: Path) -> Path:
@@ -127,8 +127,58 @@ def _iso_timestamp_or_none(timestamp: object) -> str | None:
         return None
 
 
+def _dat_image_extension(asset_file: Path) -> str | None:
+    """Determine the image extension for an exported `.dat` asset."""
+    manifest_path = asset_file.parent.joinpath(ASSET_FILENAMES_PATH)
+    try:
+        with manifest_path.open() as manifest_file:
+            manifest = json.load(manifest_file)
+    except FileNotFoundError, json.JSONDecodeError, OSError:
+        logger.debug("Could not read asset filename manifest: %s", manifest_path)
+    else:
+        original_filename = manifest.get(asset_file.name)
+        if isinstance(original_filename, str):
+            extension = Path(original_filename).suffix.lower()
+            if extension in SUPPORTED_IMAGE_EXTENSIONS:
+                return extension
+
+    try:
+        signature = asset_file.read_bytes()[:8]
+    except OSError:
+        logger.debug("Could not read asset file: %s", asset_file)
+        return None
+
+    if signature.startswith(b"\x89PNG\r\n\x1a\n"):
+        return ".png"
+    if signature.startswith(b"\xff\xd8\xff"):
+        return ".jpeg"
+
+    return None
+
+
+def _resolve_image_file(asset_id: str, user_dir: Path) -> tuple[Path, str] | None:
+    """Resolve an image asset to its source path and safe destination filename."""
+    matching_files = list(user_dir.glob(f"{asset_id}-*.png"))
+    if matching_files:
+        source_file = matching_files[0]
+        return source_file, source_file.name
+
+    export_dir = user_dir.parent
+    for pattern in [f"{asset_id}-*.jpeg", f"{asset_id}-*.jpg"]:
+        matching_files = list(export_dir.glob(pattern))
+        if matching_files:
+            source_file = matching_files[0]
+            return source_file, source_file.name
+
+    dat_file = export_dir.joinpath(f"{asset_id}.dat")
+    if dat_file.is_file() and (extension := _dat_image_extension(dat_file)):
+        return dat_file, f"{asset_id}{extension}"
+
+    return None
+
+
 def _find_image_file(asset_id: str, user_dir: Path) -> str:
-    """Find an image file by asset ID, checking multiple locations and formats.
+    """Find the destination filename for an image asset.
 
     Args:
         asset_id: The asset ID to search for.
@@ -137,16 +187,8 @@ def _find_image_file(asset_id: str, user_dir: Path) -> str:
     Returns:
         The filename of the found image, or a default PNG filename.
     """
-    # Check user directory for PNG files
-    matching_files = list(user_dir.glob(f"{asset_id}-*.png"))
-    if matching_files:
-        return matching_files[0].name
-
-    # Check parent directory (export root) for JPEG files (sanitized images)
-    parent_dir = user_dir.parent
-    matching_files = list(parent_dir.glob(f"{asset_id}-*.jpeg"))
-    if matching_files:
-        return matching_files[0].name
+    if resolved := _resolve_image_file(asset_id, user_dir):
+        return resolved[1]
 
     # Default to PNG if not found
     return f"{asset_id}.png"
@@ -845,21 +887,13 @@ def _copy_conversation_images(
             continue
 
         asset_id = image_info.asset.removeprefix("sediment://")
-
-        # Check user directory for PNG files
-        matching_files = list(user_dir.glob(f"{asset_id}-*.png"))
-
-        # If not found, check parent directory for JPEG files (sanitized images)
-        if not matching_files:
-            parent_dir = user_dir.parent
-            matching_files = list(parent_dir.glob(f"{asset_id}-*.jpeg"))
-
-        if not matching_files:
+        resolved = _resolve_image_file(asset_id, user_dir)
+        if resolved is None:
             logger.warning("Image not found for asset: %s", asset_id)
             continue
 
-        source_file = matching_files[0]
-        dest_file = image_dir.joinpath(image_info.filename)
+        source_file, filename = resolved
+        dest_file = image_dir.joinpath(filename)
 
         shutil.copy2(source_file, dest_file)
         logger.debug("Copied image: %s -> %s", source_file.name, dest_file.name)
