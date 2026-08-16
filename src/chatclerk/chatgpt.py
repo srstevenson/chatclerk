@@ -218,6 +218,10 @@ def _process_multimodal_content(
                 placeholder, image_info = _process_image_asset(part, user_dir)
                 content_items.append(placeholder)
                 image_list.append(image_info)
+            elif part_type == "audio_transcription":
+                transcript = part.get("text", "")
+                if isinstance(transcript, str) and (stripped := transcript.strip()):
+                    content_items.append(stripped)
         elif isinstance(part, str) and (stripped := part.strip()):
             content_items.append(stripped)
 
