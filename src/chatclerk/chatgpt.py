@@ -2,6 +2,7 @@
 
 import json
 import logging
+import re
 import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -16,6 +17,14 @@ DEEP_RESEARCH_CONNECTOR_ID: Final = "connector_openai_deep_research"
 logger: Final = logging.getLogger(__name__)
 ASSET_FILENAMES_PATH: Final = "conversation_asset_file_names.json"
 SUPPORTED_IMAGE_EXTENSIONS: Final = {".jpeg", ".jpg", ".png"}
+CITATION_START: Final = "\ue200"
+CITATION_END: Final = "\ue201"
+CITATION_SEPARATOR: Final = "\ue202"
+CITATION_PATTERN: Final = re.compile(
+    rf"[ \t]?{CITATION_START}cite(?P<references>"
+    rf"(?:{CITATION_SEPARATOR}[^{CITATION_START}{CITATION_END}]+)+)"
+    rf"{CITATION_END}"
+)
 
 
 def _get_user_dir(input_dir: Path) -> Path:
@@ -73,6 +82,34 @@ class Message:
     deep_research: DeepResearchInfo | None = None
 
 
+@dataclass
+class CitationRegistry:
+    """Document-wide Markdown footnote registry."""
+
+    definitions: list[tuple[str, str]] = field(default_factory=list)
+    numbers_by_url: dict[str, int] = field(default_factory=dict)
+
+    def reference(self, title: str, url: str) -> str:
+        """Register a citation and return its Markdown footnote reference."""
+        number = self.numbers_by_url.get(url)
+        if number is None:
+            number = len(self.definitions) + 1
+            self.numbers_by_url[url] = number
+            self.definitions.append((title, url))
+        return f"[^{number}]"
+
+    def format_definitions(self) -> str | None:
+        """Format all registered citations as Markdown footnote definitions."""
+        if not self.definitions:
+            return None
+
+        lines = []
+        for number, (title, url) in enumerate(self.definitions, 1):
+            label = title or url
+            lines.append(f"[^{number}]: [{label}]({url})")
+        return "\n".join(lines)
+
+
 @dataclass(frozen=True)
 class DeepResearchStep:
     """Representation of a Deep Research plan step."""
@@ -94,7 +131,7 @@ class DeepResearchInfo:
 
 
 def clean_text(text: str) -> str:
-    """Remove Unicode private use area characters from text.
+    """Remove private-use characters while retaining citation markers.
 
     ChatGPT uses private use area characters for internal formatting.
     This function strips them to produce clean output text.
@@ -108,10 +145,23 @@ def clean_text(text: str) -> str:
     private_use_start = 0xE000
     private_use_end = 0xF8FF
     cleaned: list[str] = []
-    for char in text:
-        code = ord(char)
-        if not (private_use_start <= code <= private_use_end):
-            cleaned.append(char)
+    cursor = 0
+
+    for citation_match in CITATION_PATTERN.finditer(text):
+        preceding_text = text[cursor : citation_match.start()]
+        cleaned.extend(
+            char
+            for char in preceding_text
+            if not (private_use_start <= ord(char) <= private_use_end)
+        )
+        cleaned.append(citation_match.group())
+        cursor = citation_match.end()
+
+    cleaned.extend(
+        char
+        for char in text[cursor:]
+        if not (private_use_start <= ord(char) <= private_use_end)
+    )
     return "".join(cleaned)
 
 
@@ -658,35 +708,90 @@ def _format_search_results(metadata: dict[str, Any]) -> str | None:
     return None
 
 
-def _format_citations(metadata: dict[str, Any]) -> str | None:
-    """Format citations as a numbered Markdown list.
+def _content_reference_map(metadata: dict[str, Any]) -> dict[str, tuple[str, str]]:
+    """Map ChatGPT content-reference identifiers to citation details."""
+    references: dict[str, tuple[str, str]] = {}
+
+    for content_reference in metadata.get("content_references", []):
+        for item in content_reference.get("items") or []:
+            title = item.get("title", "")
+            url = item.get("url", "")
+            if not isinstance(url, str) or not url:
+                continue
+            if not isinstance(title, str):
+                title = ""
+
+            for reference in item.get("refs") or []:
+                ref_type = reference.get("ref_type")
+                ref_index = reference.get("ref_index")
+                if isinstance(ref_type, str) and isinstance(ref_index, int):
+                    references[f"{ref_type}{ref_index}"] = (title, url)
+
+    return references
+
+
+def _resolve_content_citations(
+    content: str, metadata: dict[str, Any], registry: CitationRegistry
+) -> str:
+    """Replace ChatGPT inline citation markers with Markdown footnotes."""
+    references = _content_reference_map(metadata)
+
+    def replace(match: re.Match[str]) -> str:
+        footnotes: list[str] = []
+        raw_references = match.group("references")
+        for raw_reference in raw_references.split(CITATION_SEPARATOR):
+            if not raw_reference:
+                continue
+            citation = next(
+                (
+                    details
+                    for identifier, details in references.items()
+                    if raw_reference.endswith(identifier)
+                ),
+                None,
+            )
+            if citation is not None:
+                footnote = registry.reference(*citation)
+                if footnote not in footnotes:
+                    footnotes.append(footnote)
+        return "".join(footnotes)
+
+    return CITATION_PATTERN.sub(replace, content)
+
+
+def _format_citations(
+    metadata: dict[str, Any], registry: CitationRegistry
+) -> str | None:
+    """Format legacy citations as Markdown footnote references.
 
     Args:
         metadata: Message metadata dictionary potentially containing citations.
+        registry: Document-wide Markdown footnote registry.
 
     Returns:
-        Formatted Markdown string of citations, or `None` if no citations.
+        Markdown footnote references, or `None` if no citations.
     """
     citations = metadata.get("citations", [])
     if not citations:
         return None
 
-    citation_lines = ["\n*Citations:*"]
-    for i, citation in enumerate(citations, 1):
+    references: list[str] = []
+    for citation in citations:
         metadata_obj = citation.get("metadata", {})
         url = metadata_obj.get("url", "")
         title = metadata_obj.get("title", "")
 
-        if not url:
+        if not isinstance(url, str) or not url:
             continue
-        if title:
-            citation_lines.append(f"{i}. [{title}]({url})")
-        else:
-            citation_lines.append(f"{i}. {url}")
+        if not isinstance(title, str):
+            title = ""
+        reference = registry.reference(title, url)
+        if reference not in references:
+            references.append(reference)
 
-    if len(citation_lines) > 1:
-        logger.debug("Formatted %d citations", len(citation_lines) - 1)
-        return "\n".join(citation_lines)
+    if references:
+        logger.debug("Formatted %d citations", len(references))
+        return f"*Citations:* {' '.join(references)}"
 
     return None
 
@@ -748,12 +853,16 @@ def _format_deep_research(message: Message) -> str | None:
 
 
 def _format_message(
-    message: Message, conversation_id: str = "", image_index_offset: int = 0
+    message: Message,
+    citation_registry: CitationRegistry,
+    conversation_id: str = "",
+    image_index_offset: int = 0,
 ) -> str:
     """Format a single message as Markdown.
 
     Args:
         message: The message to format.
+        citation_registry: Document-wide Markdown footnote registry.
         conversation_id: The conversation ID for constructing image paths.
         image_index_offset: Starting index for numbering images in this message.
 
@@ -775,7 +884,10 @@ def _format_message(
         content_parts.append(deep_research)
 
     if message.content:
-        formatted_content = _format_message_content(message.content)
+        resolved_content = _resolve_content_citations(
+            message.content, message.metadata, citation_registry
+        )
+        formatted_content = _format_message_content(resolved_content)
         content_parts.append(formatted_content)
 
     if message.images:
@@ -798,7 +910,7 @@ def _format_message(
     if search_results := _format_search_results(message.metadata):
         content_parts.append(search_results)
 
-    if citations := _format_citations(message.metadata):
+    if citations := _format_citations(message.metadata, citation_registry):
         content_parts.append(citations)
 
     content = "\n\n".join(content_parts)
@@ -850,9 +962,12 @@ def _convert_to_markdown(
             all_images.extend(message.images)
 
     message_blocks: list[str] = []
+    citation_registry = CitationRegistry()
     image_counter = 0
     for message in messages:
-        message_block = _format_message(message, conversation_id, image_counter)
+        message_block = _format_message(
+            message, citation_registry, conversation_id, image_counter
+        )
         if message_block:
             message_blocks.append(message_block)
         if message.images:
@@ -860,6 +975,8 @@ def _convert_to_markdown(
 
     header = "\n".join(header_parts)
     messages_section = "\n\n".join(message_blocks)
+    if footnotes := citation_registry.format_definitions():
+        messages_section = f"{messages_section}\n\n{footnotes}"
 
     return f"{header}\n{messages_section}", all_images
 
