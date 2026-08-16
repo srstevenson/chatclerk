@@ -508,28 +508,38 @@ def _extract_message_from_node(
 
 
 def _traverse_message_tree(
-    mapping: dict[str, Any], user_dir: Path, start_id: str = "client-created-root"
+    mapping: dict[str, Any], user_dir: Path, start_id: str | None = None
 ) -> list[Message]:
     """Traverse the conversation message tree to extract all messages.
 
-    ChatGPT exports conversations as a tree structure to support branching.
+    ChatGPT exports conversations as a tree structure to support branching. Older
+    exports include child links, while newer exports include only parent links.
     This function performs a depth-first traversal to extract messages in order.
 
     Args:
         mapping: Dictionary mapping node IDs to message nodes.
         user_dir: Path to the user directory containing exported images.
-        start_id: ID of the root node to start traversal from.
+        start_id: Optional ID of the node to start traversal from. If omitted,
+            root nodes are discovered from their parent links.
 
     Returns:
         List of `Message` objects in conversation order.
     """
     messages: list[Message] = []
     deep_research_ids: set[str] = set()
+    visited_ids: set[str] = set()
+    inferred_children: dict[str, list[str]] = {node_id: [] for node_id in mapping}
+
+    for node_id, node in mapping.items():
+        parent_id = node.get("parent")
+        if isinstance(parent_id, str) and parent_id in inferred_children:
+            inferred_children[parent_id].append(node_id)
 
     def _visit(node_id: str) -> None:
-        if node_id not in mapping:
+        if node_id not in mapping or node_id in visited_ids:
             return
 
+        visited_ids.add(node_id)
         node = mapping[node_id]
 
         message = node.get("message")
@@ -541,11 +551,26 @@ def _traverse_message_tree(
         if msg is not None:
             messages.append(msg)
 
-        children = node.get("children", [])
+        explicit_children = node.get("children")
+        children = (
+            explicit_children
+            if isinstance(explicit_children, list)
+            else inferred_children[node_id]
+        )
         for child_id in children:
-            _visit(child_id)
+            if isinstance(child_id, str):
+                _visit(child_id)
 
-    _visit(start_id)
+    if start_id is not None:
+        root_ids = [start_id]
+    else:
+        root_ids = [
+            node_id for node_id, node in mapping.items() if node.get("parent") is None
+        ]
+
+    for root_id in root_ids:
+        _visit(root_id)
+
     return messages
 
 
