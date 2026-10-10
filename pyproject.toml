@@ -31,6 +31,7 @@ skip-magic-trailing-comma = true
 select = ["ALL"]
 ignore = [
   "COM812", # Trailing comma missing
+  "CPY001", # Missing copyright notice
 ]
 
 [tool.ruff.lint.flake8-tidy-imports]
