@@ -1,5 +1,6 @@
 """Convert data export from grok.com to Markdown."""
 
+import html
 import json
 import logging
 import re
@@ -205,7 +206,112 @@ def _extract_file_attachments(
     return attachments
 
 
-def _format_message(  # noqa: PLR0912, C901
+def _format_citations(message: str, response_data: dict[str, Any]) -> str:
+    """Replace inline citation cards with Markdown links."""
+    cards = {}
+    for encoded_card in response_data.get("card_attachments_json", []):
+        try:
+            card = json.loads(encoded_card)
+        except json.JSONDecodeError:
+            logger.warning("Ignoring malformed citation card")
+            continue
+        if isinstance(card, dict) and card.get("id") and card.get("url"):
+            cards[card["id"]] = card["url"]
+
+    def _replace_citation(match: re.Match[str]) -> str:
+        card_id = re.search(r'\bcard_id="([^"]+)"', match.group(0))
+        if card_id and (url := cards.get(card_id.group(1))):
+            citation_id = re.search(
+                r'<argument name="citation_id">(.*?)</argument>', match.group(0)
+            )
+            label = citation_id.group(1) if citation_id else "Source"
+            return f"[{label}](<{url}>)"
+        return match.group(0)
+
+    return re.sub(
+        r"<grok:render\b[^>]*\btype=\"render_inline_citation\"[^>]*>"
+        r".*?</grok:render>",
+        _replace_citation,
+        message,
+        flags=re.DOTALL,
+    )
+
+
+def _format_search_results(response_data: dict[str, Any]) -> str:
+    """Collect and format unique web search results and X post references."""
+    results = list(response_data.get("web_search_results", []))
+    post_ids = list(response_data.get("xpost_ids", []))
+    for step in response_data.get("steps", []):
+        results.extend(step.get("web_search_results", []))
+        post_ids.extend(step.get("x_posts_ids", []))
+        for tool in step.get("tool_usage_results", []):
+            result = tool.get("result", {})
+            results.extend(result.get("WebSearchResults", []))
+            post_ids.extend(result.get("XPostIds", []))
+
+    parts = []
+    seen_urls: set[str] = set()
+    for result in results:
+        url = result.get("url")
+        if not url or url in seen_urls:
+            continue
+        seen_urls.add(url)
+        title = (result.get("title") or url).replace("\n", " ")
+        title = title.replace("[", r"\[").replace("]", r"\]")
+        parts.append(f"- [{title}](<{url}>)")
+        if preview := result.get("preview"):
+            parts.append("\n".join(f"  > {line}" for line in preview.splitlines()))
+    parts.extend(
+        f"- [X post {post_id}](https://x.com/i/status/{post_id})"
+        for post_id in dict.fromkeys(post_ids)
+    )
+    return "\n".join(parts)
+
+
+def _format_tool_cards(text: str) -> str:
+    """Format tool card names and arguments, preserving unrecognised cards."""
+
+    def _replace_card(match: re.Match[str]) -> str:
+        card = match.group(0)
+        name = re.search(r"<xai:tool_name>(.*?)</xai:tool_name>", card, re.DOTALL)
+        args = re.search(r"<xai:tool_args>(.*?)</xai:tool_args>", card, re.DOTALL)
+        if not name or not args:
+            return f"```xml\n{card}\n```"
+        arguments = args.group(1).strip()
+        if arguments.startswith("<![CDATA[") and arguments.endswith("]]>"):
+            arguments = arguments[9:-3]
+        else:
+            arguments = html.unescape(arguments)
+        return f"**{html.unescape(name.group(1))}**\n\n```json\n{arguments}\n```\n\n"
+
+    return re.sub(
+        r"<xai:tool_usage_card>.*?</xai:tool_usage_card>",
+        _replace_card,
+        text,
+        flags=re.DOTALL,
+    ).strip()
+
+
+def _format_steps(steps: list[dict[str, Any]]) -> str:
+    """Format activity text and tool arguments in step order."""
+    parts = []
+    for step in steps:
+        tagged_text = step.get("tagged_text", {})
+        for tag in step.get("tag_order", list(tagged_text)):
+            text = tagged_text.get(tag)
+            if not text:
+                continue
+            parts.append(_format_tool_cards(text))
+    if not parts:
+        return ""
+    return (
+        "<details>\n<summary>Search and tool activity</summary>\n\n"
+        + "\n\n".join(parts)
+        + "\n\n</details>"
+    )
+
+
+def _format_message(  # noqa: PLR0912, PLR0915, C901
     response: dict[str, Any], user_dir: Path, conversation_id: str = ""
 ) -> MessageResult:
     """Format a single message as Markdown.
@@ -223,13 +329,16 @@ def _format_message(  # noqa: PLR0912, C901
     sender_lower = sender.lower()
     message = response_data.get("message", "").strip()
     create_time = response_data.get("create_time")
-    model = response_data.get("model", "unknown")
-    metadata = response_data.get("metadata", {})
+    metadata = response_data.get("metadata") or {}
+    model = (metadata.get("request_metadata") or {}).get(
+        "resolved_model"
+    ) or response_data.get("model", "unknown")
 
     artifacts: list[ArtifactInfo] = []
     attachments: list[FileAttachmentInfo] = []
 
     if message:
+        message = _format_citations(message, response_data)
         message, artifacts = _extract_artifacts_from_message(message)
 
     attachments = _extract_file_attachments(response_data, user_dir)
@@ -284,6 +393,13 @@ def _format_message(  # noqa: PLR0912, C901
             content_parts.append(
                 f"*[Attachment: {attachment.attachment_id} (file not in export)]*"
             )
+
+    if steps := _format_steps(response_data.get("steps", [])):
+        content_parts.append(steps)
+    if sources := _format_search_results(response_data):
+        content_parts.append(
+            f"<details>\n<summary>Search sources</summary>\n\n{sources}\n\n</details>"
+        )
 
     header_line = "\n\n".join(header_parts)
     content = "\n\n".join(content_parts)
