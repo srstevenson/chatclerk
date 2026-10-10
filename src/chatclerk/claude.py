@@ -4,7 +4,7 @@ import json
 import logging
 from dataclasses import dataclass
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Final
+from typing import TYPE_CHECKING, Any, Final, cast
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -331,7 +331,7 @@ def _process_tool_use(item: dict[str, Any], text_parts: list[str]) -> str:
     Returns:
         The name of the tool that was used.
     """
-    tool_name = item["name"]
+    tool_name = cast("str", item["name"])
 
     if tool_name == "artifacts":
         text_parts.append(_format_artifact(item))

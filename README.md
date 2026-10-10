@@ -16,7 +16,7 @@ saved in subdirectories matching the conversation filename.
 
 ## Installation
 
-chatclerk requires Python 3.14 or later. Install it from GitHub using [uv] with:
+chatclerk requires Python 3.15 or later. Install it from GitHub using [uv] with:
 
 ```sh
 uv tool install git+https://github.com/srstevenson/chatclerk.git

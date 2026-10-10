@@ -956,10 +956,7 @@ def _convert_to_markdown(
 
     logger.debug("Extracted %d visible messages", len(messages))
 
-    all_images: list[ImageInfo] = []
-    for message in messages:
-        if message.images:
-            all_images.extend(message.images)
+    all_images = [*message.images for message in messages]
 
     message_blocks: list[str] = []
     citation_registry = CitationRegistry()
