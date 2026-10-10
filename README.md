@@ -97,7 +97,7 @@ file per conversation to the `kagi-logs` directory.
 ## Development
 
 chatclerk uses [uv] for dependency management and [Ruff] and [ty] for
-formatting, linting, and type checking, orchestrated with [Just].
+formatting, linting, and type checking, run through Make.
 
 To clone the repository and set up a development environment run:
 
@@ -110,14 +110,13 @@ uv sync
 Format code and run the linter and type-checker with:
 
 ```sh
-just fmt lint
+make fmt lint
 ```
 
 [ChatGPT]: https://chatgpt.com/
 [Claude]: https://claude.ai/
 [Grok]: https://grok.com/
 [isync]: https://isync.sourceforge.io/
-[Just]: https://github.com/casey/just
 [Kagi Assistant]: https://kagi.com/assistant
 [OfflineIMAP]: https://github.com/OfflineIMAP/offlineimap3
 [Ruff]: https://docs.astral.sh/ruff/
