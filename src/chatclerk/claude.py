@@ -685,15 +685,23 @@ def _convert_memories(data: dict[str, Any] | list[Any]) -> str:
 
 
 def _export_memories(input_dir: Path, output_dir: Path) -> None:
-    """Convert memories.json when it is present in the export."""
-    path = input_dir / "memories.json"
-    if not path.is_file():
+    """Convert memories.json and memories/*.json into memories.md."""
+    paths = sorted((input_dir / "memories").glob("*.json"))
+    legacy_path = input_dir / "memories.json"
+    if legacy_path.is_file():
+        paths.insert(0, legacy_path)
+    if not paths:
         return
-    with path.open() as file:
-        data = json.load(file)
+
+    records: list[Any] = []
+    for path in paths:
+        with path.open() as file:
+            data = json.load(file)
+        records.extend(data if isinstance(data, list) else [data])
+        logger.info("Loaded memories: %s", path.relative_to(input_dir))
+
     output_dir.mkdir(parents=True, exist_ok=True)
-    (output_dir / "memories.md").write_text(_convert_memories(data))
-    logger.info("Converted: memories.json")
+    (output_dir / "memories.md").write_text(_convert_memories(records))
 
 
 def main() -> None:
@@ -701,7 +709,7 @@ def main() -> None:
 
     Reads `conversations.json` from the input directory, converts each
     conversation with content to Markdown, and writes the results to the output
-    directory. The optional memories.json file is exported too.
+    directory. Optional memories.json and memories/*.json files are exported too.
     """
     parser = build_argument_parser("claude.ai")
     args = parser.parse_args(namespace=Args())
