@@ -61,7 +61,12 @@ chatclerk-claude -i /path/to/claude-export -o claude-logs
 ```
 
 This converts all conversations to Markdown files in the `claude-logs`
-directory. Artefacts and tool results are preserved in the output.
+directory, including thinking text, artefacts, tool results, and extracted
+attachment text. Messages stay in export order, with links to their parents
+where the export includes them. Unrecognised tool inputs and populated metadata
+fields are saved as fenced JSON; interactive widgets are preserved as source. If
+`memories.json` is present, conversation memory and memory files are saved to
+`memories.md`.
 
 ### Grok
 

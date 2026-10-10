@@ -4,7 +4,10 @@ import json
 import logging
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Final
+from typing import TYPE_CHECKING, Any, Final
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 from chatclerk.argparse import Args, build_argument_parser
 from chatclerk.datetime import iso_timestamp_to_str
@@ -76,6 +79,28 @@ def _format_json_if_valid(text: str) -> ToolOutput:
         return ToolOutput(text=text, language=Language.TEXT)
 
 
+def _code_block(text: str, language: str = "") -> str:
+    """Fence content without letting embedded backticks close the block."""
+    fence = "```"
+    while fence in text:
+        fence += "`"
+    return f"{fence}{language}\n{text.rstrip()}\n{fence}"
+
+
+def _format_metadata(item: dict[str, Any], handled: set[str]) -> str:
+    """Preserve populated fields not rendered elsewhere."""
+    metadata = {
+        k: v
+        for k, v in item.items()
+        if k not in handled and v not in (None, "", [], {})
+    }
+    if not metadata:
+        return ""
+    return "*Metadata:*\n" + _code_block(
+        json.dumps(metadata, indent=2, ensure_ascii=False), "json"
+    )
+
+
 def _format_citations(citations: list[dict[str, Any]]) -> str | None:
     """Format citations as a numbered Markdown list.
 
@@ -90,9 +115,11 @@ def _format_citations(citations: list[dict[str, Any]]) -> str | None:
 
     citation_lines = ["", "*Citations:*"]
     for i, citation in enumerate(citations, 1):
-        details = citation.get("details", {})  # details can be null
+        details = citation.get("details") or {}
         if url := details.get("url", ""):
             citation_lines.append(f"{i}. [{url}]({url})")
+        if metadata := _format_metadata(citation, set()):
+            citation_lines.append(metadata)
 
     min_citation_lines = 2
     if len(citation_lines) > min_citation_lines:
@@ -101,14 +128,14 @@ def _format_citations(citations: list[dict[str, Any]]) -> str | None:
     return None
 
 
-def _format_artifact(item: dict[str, Any]) -> str | None:
+def _format_artifact(item: dict[str, Any]) -> str:
     """Format an artifact tool use as Markdown.
 
     Args:
         item: Dictionary containing artifact data from tool use.
 
     Returns:
-        Formatted Markdown string representing the artifact, or `None` if empty.
+        Formatted Markdown string representing the artifact.
     """
     artifact_input = item["input"]
     artifact_title = artifact_input.get("title", "Untitled Artifact")
@@ -116,27 +143,26 @@ def _format_artifact(item: dict[str, Any]) -> str | None:
     artifact_content = artifact_input.get("content", "")
     artifact_id = artifact_input.get("id", "")
 
-    if not artifact_content:
-        return None
-
     logger.debug("Artifact: %s", artifact_title)
 
     artifact_header = f"### Artifact: {artifact_title}"
     if artifact_id:
         artifact_header += f"\n*Type: {artifact_type} | ID: {artifact_id}*"
 
-    if artifact_type == "text/markdown":
-        return f"{artifact_header}\n\n---\n\n{artifact_content.rstrip()}\n\n---"
-
-    lang = ""
-    if artifact_type == "application/vnd.ant.code":
-        lang = "python"
-    elif artifact_type.startswith("text/"):
-        lang = artifact_type.replace("text/", "")
-
-    if lang:
-        return f"{artifact_header}\n\n```{lang}\n{artifact_content.rstrip()}\n```"
-    return f"{artifact_header}\n\n```\n{artifact_content.rstrip()}\n```"
+    parts = [artifact_header]
+    if artifact_content:
+        if artifact_type == "text/markdown":
+            parts.append(f"---\n\n{artifact_content.rstrip()}\n\n---")
+        else:
+            lang = artifact_input.get("language") or ""
+            if not lang and artifact_type.startswith("text/"):
+                lang = artifact_type.removeprefix("text/")
+            parts.append(_code_block(artifact_content, lang))
+    if metadata := _format_metadata(
+        artifact_input, {"title", "type", "content", "id", "language"}
+    ):
+        parts.append(metadata)
+    return "\n\n".join(parts)
 
 
 def _format_web_search_input(tool_input: dict[str, Any]) -> str | None:
@@ -180,36 +206,44 @@ def _format_repl_input(tool_input: dict[str, Any]) -> str | None:
     """
     if code := tool_input.get("code", ""):
         logger.debug("REPL: %d chars", len(code))
-        return f"*[Code executed]*\n```javascript\n{code.strip()}\n```"
+        return "*[Code executed]*\n" + _code_block(code.strip(), "javascript")
     return None
 
 
 def _format_tool_input(tool_name: str, tool_input: dict[str, Any]) -> str | None:
     """Format tool input parameters for display.
 
-    Only formats inputs for selected tools that provide useful context.
+    Known tools use a short description; other inputs are preserved as JSON.
 
     Args:
         tool_name: Name of the tool being used.
         tool_input: Dictionary containing tool input parameters.
 
     Returns:
-        Formatted input string, or `None` if tool not supported or empty.
+        Formatted input string, or `None` if empty.
     """
     if not tool_input:
         return None
 
     handlers = {
-        "web_search": _format_web_search_input,
-        "web_fetch": _format_web_fetch_input,
-        "repl": _format_repl_input,
+        "web_search": (_format_web_search_input, "query"),
+        "web_fetch": (_format_web_fetch_input, "url"),
+        "repl": (_format_repl_input, "code"),
     }
 
-    handler = handlers.get(tool_name)
-    if handler:
-        return handler(tool_input)
-
-    return None
+    parts = []
+    handled = None
+    if tool_name in handlers:
+        handler, handled = handlers[tool_name]
+        if formatted := handler(tool_input):
+            parts.append(formatted)
+    remaining = {k: v for k, v in tool_input.items() if k != handled}
+    if remaining:
+        parts.append(
+            f"*[Tool Input: {tool_name}]*\n"
+            + _code_block(json.dumps(remaining, indent=2, ensure_ascii=False), "json")
+        )
+    return "\n\n".join(parts) or None
 
 
 def _format_display_content(
@@ -230,27 +264,28 @@ def _format_display_content(
     display_type = display_content.get("type", "")
     logger.debug("Display_content: type=%s, tool=%s", display_type, tool_name)
 
-    if display_type == "rich_link":
-        link = display_content.get("link", {})
-        url = link.get("url", "")
-        title = link.get("title", url)
-        if url:
-            logger.debug("Rich link: %s", title)
-            return f"*[Tool Result: {tool_name}]*\n- [{title}]({url})"
-
-    elif display_type == "rich_content":
-        if content_items := display_content.get("content", []):
-            links: list[str] = []
-            for content_item in content_items:
-                title = content_item.get("title", "")
-                url = content_item.get("url", "")
-                if title and url:
-                    links.append(f"- [{title}]({url})")
-            if links:
-                logger.debug("Rich content: %d items", len(links))
-                return f"*[Tool Result: {tool_name}]*\n" + "\n".join(links)
-
-    return None
+    parts = [f"*[Tool Result: {tool_name}]*"]
+    if display_type in {"rich_link", "rich_content"}:
+        content_items = (
+            [display_content.get("link") or {}]
+            if display_type == "rich_link"
+            else display_content.get("content", [])
+        )
+        for content_item in content_items:
+            url = content_item.get("url")
+            title = content_item.get("title") or url or "Untitled"
+            parts.append(f"- [{title}]({url})" if url else f"- {title}")
+            if metadata := _format_metadata(content_item, {"title", "url"}):
+                parts.append(metadata)
+    elif display_type == "text":
+        parts.append(display_content.get("text", ""))
+    else:
+        parts.append(_code_block(json.dumps(display_content, indent=2), "json"))
+    if metadata := _format_metadata(
+        display_content, {"type", "link", "content", "text"}
+    ):
+        parts.append(metadata)
+    return "\n\n".join(parts)
 
 
 def _format_tool_result_text(result_text: str, tool_name: str) -> str | None:
@@ -267,12 +302,9 @@ def _format_tool_result_text(result_text: str, tool_name: str) -> str | None:
         return None
 
     formatted = _format_json_if_valid(result_text)
-    clean_text = formatted.text.rstrip()
-    lang = formatted.code_block_language
-
-    if lang:
-        return f"*[Tool Result: {tool_name}]*\n```{lang}\n{clean_text}\n```"
-    return f"*[Tool Result: {tool_name}]*\n```\n{clean_text}\n```"
+    return f"*[Tool Result: {tool_name}]*\n" + _code_block(
+        formatted.text, formatted.code_block_language
+    )
 
 
 def _process_text_content(item: dict[str, Any], text_parts: list[str]) -> None:
@@ -285,7 +317,7 @@ def _process_text_content(item: dict[str, Any], text_parts: list[str]) -> None:
     if text := item["text"].strip():
         text_parts.append(text)
 
-    if citations_text := _format_citations(item["citations"]):
+    if citations_text := _format_citations(item.get("citations") or []):
         text_parts.append(citations_text)
 
 
@@ -302,15 +334,38 @@ def _process_tool_use(item: dict[str, Any], text_parts: list[str]) -> str:
     tool_name = item["name"]
 
     if tool_name == "artifacts":
-        if artifact_text := _format_artifact(item):
-            text_parts.append(artifact_text)
+        text_parts.append(_format_artifact(item))
 
-    elif tool_name in ["web_search", "web_fetch", "repl"] and (
-        tool_input_text := _format_tool_input(tool_name, item["input"])
-    ):
+    elif tool_input_text := _format_tool_input(tool_name, item["input"]):
         text_parts.append(tool_input_text)
 
+    if display_text := _format_display_content(
+        item.get("display_content") or {}, tool_name
+    ):
+        text_parts.append(display_text)
     return tool_name
+
+
+def _process_tool_result_item(
+    item: dict[str, Any], tool_name: str, text_parts: list[str]
+) -> None:
+    """Render text and search results, preserving other result types as JSON."""
+    result_type = item.get("type")
+    if result_type == "text":
+        if result_text := _format_tool_result_text(item["text"], tool_name):
+            text_parts.append(result_text)
+        handled = {"type", "text"}
+    elif result_type == "knowledge":
+        url = item.get("url")
+        title = item.get("title") or url or "Search result"
+        text_parts.append(f"### [{title}]({url})" if url else f"### {title}")
+        if text := item.get("text"):
+            text_parts.append(text)
+        handled = {"type", "title", "url", "text"}
+    else:
+        handled = set()
+    if metadata := _format_metadata(item, handled):
+        text_parts.append(metadata)
 
 
 def _process_tool_result(item: dict[str, Any], text_parts: list[str]) -> None:
@@ -322,19 +377,28 @@ def _process_tool_result(item: dict[str, Any], text_parts: list[str]) -> None:
     """
     tool_name = item["name"]
 
-    if display_text := _format_display_content(item["display_content"], tool_name):
+    if display_text := _format_display_content(
+        item.get("display_content") or {}, tool_name
+    ):
         text_parts.append(display_text)
 
     result_content = item["content"]
-    if isinstance(result_content, list):
-        text_parts.extend(
-            result_text
-            for result_item in result_content
-            if isinstance(result_item, dict)
-            and result_item.get("type") == "text"
-            and (
-                result_text := _format_tool_result_text(result_item["text"], tool_name)
-            )
+    if isinstance(result_content, str):
+        if result_text := _format_tool_result_text(result_content, tool_name):
+            text_parts.append(result_text)
+    elif isinstance(result_content, list):
+        for result_item in result_content:
+            if not isinstance(result_item, dict):
+                text_parts.append(_code_block(json.dumps(result_item), "json"))
+                continue
+            _process_tool_result_item(result_item, tool_name, text_parts)
+    elif result_content:
+        text_parts.append(_code_block(json.dumps(result_content, indent=2), "json"))
+
+    if structured := item.get("structured_content"):
+        text_parts.append(
+            "*Structured result:*\n"
+            + _code_block(json.dumps(structured, indent=2, ensure_ascii=False), "json")
         )
 
 
@@ -350,22 +414,36 @@ def _extract_text_from_content(content: list[dict[str, Any]]) -> str:
     Returns:
         Formatted Markdown string combining all content items.
     """
-    if not content:
-        return ""
-
     text_parts: list[str] = []
     tool_uses: list[str] = []
 
     for item in content:
         content_type = item["type"]
 
+        handled = {"type"}
         if content_type == "text":
             _process_text_content(item, text_parts)
+            handled |= {"text", "citations"}
+        elif content_type == "thinking":
+            text_parts.append("### Thinking")
+            if thinking := item.get("thinking"):
+                text_parts.append(thinking)
+            text_parts.extend(
+                summary["summary"] if isinstance(summary, dict) else summary
+                for summary in item.get("summaries") or []
+            )
+            handled |= {"thinking", "summaries"}
         elif content_type == "tool_use":
             tool_name = _process_tool_use(item, text_parts)
             tool_uses.append(tool_name)
+            handled |= {"name", "input", "display_content"}
         elif content_type == "tool_result":
             _process_tool_result(item, text_parts)
+            handled |= {"name", "content", "display_content", "structured_content"}
+        else:
+            handled = set()
+        if metadata := _format_metadata(item, handled):
+            text_parts.append(metadata)
 
     result = "\n\n".join(text_parts)
 
@@ -385,7 +463,7 @@ def _format_file_item(file_item: dict[str, Any]) -> str:
     Returns:
         Formatted Markdown list item with file details.
     """
-    file_name = file_item.get("file_name", "unknown")
+    file_name = file_item.get("file_name") or file_item.get("file_uuid") or "unknown"
     file_size = file_item.get("file_size", "")
     file_type = file_item.get("file_type", "")
 
@@ -395,6 +473,12 @@ def _format_file_item(file_item: dict[str, Any]) -> str:
     if file_size:
         info += f" (size: {file_size} bytes)"
 
+    if extracted := file_item.get("extracted_content"):
+        info += "\n\n" + _code_block(extracted)
+    if metadata := _format_metadata(
+        file_item, {"file_name", "file_size", "file_type", "extracted_content"}
+    ):
+        info += "\n\n" + metadata
     return info
 
 
@@ -437,11 +521,14 @@ def _format_files(files: list[dict[str, Any]]) -> str | None:
     return None
 
 
-def _format_message(message: dict[str, Any]) -> str:
+def _format_message(
+    message: dict[str, Any], message_ids: set[str] | None = None
+) -> str:
     """Format a single chat message as Markdown.
 
     Args:
         message: Dictionary containing message data.
+        message_ids: IDs available for parent links in this conversation.
 
     Returns:
         The formatted message as a Markdown string.
@@ -455,10 +542,22 @@ def _format_message(message: dict[str, Any]) -> str:
     timestamp = iso_timestamp_to_str(created_at)
 
     content = _extract_text_from_content(message["content"])
-    if not content:
-        content = message["text"].strip()
-
     content_parts: list[str] = []
+    if uuid := message.get("uuid"):
+        header = f'<a id="message-{uuid}"></a>\n\n{header}'
+        content_parts.append(f"*UUID: {uuid}*")
+    if parent := message.get("parent_message_uuid"):
+        parent_text = (
+            f"[{parent}](#message-{parent})"
+            if message_ids is not None and parent in message_ids
+            else f"{parent} (not included in export)"
+        )
+        content_parts.append(f"*Parent: {parent_text}*")
+    if (fallback_text := message["text"].strip()) and not any(
+        item["type"] == "text" and item.get("text", "").strip()
+        for item in message["content"]
+    ):
+        content_parts.append(fallback_text)
     if content:
         content_parts.append(content)
 
@@ -468,6 +567,20 @@ def _format_message(message: dict[str, Any]) -> str:
     if files_text := _format_files(message["files"]):
         content_parts.append(files_text)
 
+    if metadata := _format_metadata(
+        message,
+        {
+            "uuid",
+            "parent_message_uuid",
+            "sender",
+            "created_at",
+            "content",
+            "text",
+            "attachments",
+            "files",
+        },
+    ):
+        content_parts.append(metadata)
     return f"{header}\n\n*{timestamp}*\n\n" + "\n\n".join(content_parts)
 
 
@@ -499,12 +612,17 @@ def _convert_to_markdown(conversation: dict[str, Any]) -> str:
         f"- **Updated:** {updated_at}\n",
     ]
 
+    if summary := conversation.get("summary"):
+        header_parts.append(f"## Summary\n\n{summary}\n")
+    if metadata := _format_metadata(
+        conversation,
+        {"uuid", "name", "created_at", "updated_at", "summary", "chat_messages"},
+    ):
+        header_parts.append(metadata + "\n")
+
     messages: list[dict[str, Any]] = conversation["chat_messages"]
-    message_blocks = [
-        message_block
-        for message in messages
-        if (message_block := _format_message(message))
-    ]
+    message_ids = {message["uuid"] for message in messages}
+    message_blocks = [_format_message(message, message_ids) for message in messages]
 
     header = "\n".join(header_parts)
     messages_section = "\n\n".join(message_blocks)
@@ -522,7 +640,7 @@ def _has_content(conversation: dict[str, Any]) -> bool:
         `True` if the conversation has a name, messages, or attachments,
         otherwise `False`.
     """
-    if conversation["name"].strip():
+    if conversation["name"].strip() or conversation.get("summary"):
         return True
 
     messages = conversation["chat_messages"]
@@ -531,7 +649,11 @@ def _has_content(conversation: dict[str, Any]) -> bool:
             return True
 
         for content_item in message["content"]:
-            if content_item["type"] == "text" and content_item["text"].strip():
+            if any(
+                value.strip() if isinstance(value, str) else value
+                for key, value in content_item.items()
+                if key not in {"type", "start_timestamp", "stop_timestamp", "flags"}
+            ):
                 return True
 
         if message.get("attachments") or message.get("files"):
@@ -540,12 +662,46 @@ def _has_content(conversation: dict[str, Any]) -> bool:
     return False
 
 
+def _convert_memories(data: dict[str, Any] | list[Any]) -> str:
+    """Render conversation memory and memory files with their metadata."""
+    parts = ["# Memories"]
+    records = data if isinstance(data, list) else [data]
+    for record in records:
+        if not isinstance(record, dict):
+            parts.append(_code_block(json.dumps(record, indent=2), "json"))
+            continue
+        if memory := record.get("conversations_memory"):
+            parts.append(f"## Conversation memory\n\n{memory}")
+        for memory_file in record.get("memory_files") or []:
+            parts.append(f"## {memory_file.get('path') or 'Memory file'}")
+            parts.append(memory_file.get("content") or "")
+            if metadata := _format_metadata(memory_file, {"path", "content"}):
+                parts.append(metadata)
+        if metadata := _format_metadata(
+            record, {"conversations_memory", "memory_files"}
+        ):
+            parts.append(metadata)
+    return "\n\n".join(parts) + "\n"
+
+
+def _export_memories(input_dir: Path, output_dir: Path) -> None:
+    """Convert memories.json when it is present in the export."""
+    path = input_dir / "memories.json"
+    if not path.is_file():
+        return
+    with path.open() as file:
+        data = json.load(file)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    (output_dir / "memories.md").write_text(_convert_memories(data))
+    logger.info("Converted: memories.json")
+
+
 def main() -> None:
     """Convert Claude conversation exports to Markdown files.
 
     Reads `conversations.json` from the input directory, converts each
     conversation with content to Markdown, and writes the results to the output
-    directory.
+    directory. The optional memories.json file is exported too.
     """
     parser = build_argument_parser("claude.ai")
     args = parser.parse_args(namespace=Args())
@@ -577,6 +733,7 @@ def main() -> None:
 
         exported_count += 1
 
+    _export_memories(args.input_dir, args.output_dir)
     logger.info(
         "Export complete: %d exported, %d skipped", exported_count, skipped_count
     )
